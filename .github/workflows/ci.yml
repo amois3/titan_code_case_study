@@ -1,0 +1,59 @@
+name: CI
+
+# The point of extracting these modules was that they can be run, not only
+# read. The same gate the full project uses, on the same three platforms:
+# a green badge here is about this repository and nothing else.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  verify:
+    name: ${{ matrix.os }} · node ${{ matrix.node }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      # One platform failing should not hide the state of the others.
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        node: ['20', '22', '24']
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+
+      # bubblewrap is what confines shell commands on Linux. Installing it is
+      # not enough on Ubuntu 24.04: AppArmor restricts unprivileged user
+      # namespaces by default, so bwrap is present and cannot create the
+      # namespace it needs. The runtime handles that by probing and falling
+      # back — but a fallback here would mean the containment test never runs
+      # in CI, which is the test worth running most.
+      - name: Install bubblewrap
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update && sudo apt-get install -y bubblewrap
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 || true
+          bwrap --ro-bind / / --dev /dev --proc /proc -- /bin/true \
+            && echo "bubblewrap works on this runner" \
+            || echo "bubblewrap unusable here; sandbox tests will skip"
+
+      - run: npm ci
+
+      - name: Type check
+        run: npm run typecheck
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Test
+        run: npm test
+        env:
+          # Where a sandbox is supposed to exist, its absence is a failure and
+          # not a skip. Windows has no backend, so the flag is not set there.
+          TITAN_CODE_REQUIRE_SANDBOX: ${{ runner.os == 'Windows' && '0' || '1' }}

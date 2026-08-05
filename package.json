@@ -1,0 +1,26 @@
+{
+  "name": "titan-code-case-study",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Extracted, runnable modules from Titan Code \u0432\u0402\u201d the shell lexer, the policy over it, path containment, the OS sandbox, and the repeat guard",
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src",
+    "verify": "npm run typecheck && npm run lint && npm test"
+  },
+  "author": "Aleksejs Moisejevs",
+  "license": "MIT",
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@types/node": "^25.9.5",
+    "eslint": "^10.8.0",
+    "typescript": "^6.0.3",
+    "typescript-eslint": "^8.66.0",
+    "vitest": "^4.1.5"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}
