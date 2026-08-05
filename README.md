@@ -29,7 +29,7 @@ Windows on Node 20, 22 and 24.
 
 Eleven modules, 1,886 lines, **zero runtime dependencies** — node's standard
 library and nothing else. 705 lines of tests, and the three design documents
-the product ships with.
+the product ships with — 606 lines, copied unchanged.
 
 | Module | Lines | What it does |
 |---|---:|---|
@@ -159,7 +159,7 @@ Verified against the tree at the time of writing, not from memory:
 
 | | |
 |---|---|
-| TypeScript | 15,494 lines across 126 modules |
+| TypeScript | 15,560 lines across 126 modules |
 | Tests | 220, in 55 files |
 | CI | 9 matrix jobs on Linux, macOS and Windows × Node 20, 22, 24, plus coverage and a dependency audit |
 | Slash commands | 35 |

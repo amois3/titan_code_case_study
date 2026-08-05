@@ -25,7 +25,7 @@ src/
 `agent/index.ts` holds a conversation, sends it with a tool schema, and acts
 on what comes back. Each turn the model either answers or asks for tools; tool
 results are appended and the loop continues, up to a turn limit that can be
-extended once.
+extended at most three times.
 
 Three details are not obvious from that description.
 

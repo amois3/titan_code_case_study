@@ -37,8 +37,9 @@ React, no curses.
 for it with a full-tree diff per frame and a dependency that owns the paint
 loop. What this interface needs is narrower: repaint the rows that changed,
 keep a scroll region so the input line stays still, put the session in the
-alternate buffer so it does not pollute scrollback. That is about 800 lines
-written once against a stable, forty-year-old interface.
+alternate buffer so it does not pollute scrollback. That was about 800 lines
+written once against a stable, forty-year-old interface; it is 1,755 across 14
+modules now, and still owns its own paint loop.
 
 **Cost.** Layout is manual. There is no component model, so a new zone means
 new code in `layout.ts` rather than a new element in a tree.
@@ -226,3 +227,24 @@ with the rest. The first run on these rules found a dead `require`, a bound
 handler nothing called, a 39-line unreferenced function, three empty catches,
 `const` declarations leaking across switch cases, and a thrown timeout that
 discarded the error explaining why.
+
+---
+
+## ADR-13 — The May audit, and why its text is not in the tree
+
+**Decision.** A full audit of the repository was written on 2026-05-07 and
+lived in `docs/encyclopedic-audit/` until commit `790a63e`. Its findings are
+recorded in the ADRs above; the text itself is not carried forward.
+
+**Why.** It described a tree that no longer exists — `dist_or/`, `dist_se/`
+and `dist_si/` alongside `dist/`, a README claiming an Ink UI that was never a
+dependency, 69 source files and 5 tests. Every one of those is fixed, and the
+document said so itself in a banner: *do not use it for current decisions*.
+Documentation that has to warn the reader not to believe it is not
+documentation. It was also written in Russian, while everything in this
+project except the interface is English.
+
+**Consequence.** The audit is reachable at
+`git show 790a63e:docs/encyclopedic-audit/README.md` and in the five reports
+beside it. What it produced — the path repair, the permission work, the SSRF
+checks, the end-to-end tests — is in the code, and the ADRs say why.
