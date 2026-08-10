@@ -9,11 +9,11 @@ src/
   main.ts            wiring: argv, session, screen, agent, command dispatch
   app/               pure helpers extracted from main (confirm, help, paths)
   agent/             the loop — tool calls, compaction, subagent dispatch
-  screen/            the terminal: renderer, layout, keyboard, seven zones
+  screen/            the terminal: renderer, layout, keyboard, eight zones
   tools/             13 tools, plus the shell, sandbox and policy layers
-  commands/          35 slash commands
-  storage/           sessions, tasks, queue, preferences, skill state
-  secrets/           SecretStore (file default; keychain reserved)
+  commands/          36 slash commands
+  storage/           sessions, tasks, shell job ledger, queue, preferences, skill state
+  secrets/           SecretStore (one backend: a file, mode 600 where the OS supports it)
   e2e/               packaging and runtime API smoke tests
   mcp.ts             MCP client
   mcpTransport.ts    stdio and Streamable HTTP

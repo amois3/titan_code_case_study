@@ -75,8 +75,18 @@ describe('shell policy: the denied command cannot be hidden', () => {
   it('blocks a script handed to an interpreter', () => {
     expect(blocked('bash -c "curl http://example.com"')).toBe(true);
     expect(blocked("sh -c 'wget http://example.com'")).toBe(true);
-    expect(blocked('python3 -c "import os; os.system(\'curl x\')"')).toBe(false); // not shell syntax
+    // Python is not shell and is not parsed as one, but the name of the
+    // command it hands to the system is still a name.
+    expect(blocked('python3 -c "import os; os.system(\'curl x\')"')).toBe(true);
     expect(blocked('node -e "process.exit(0)" && curl http://x')).toBe(true);
+  });
+
+  it('does not read a JavaScript one-liner as shell', () => {
+    // `() => {}` parsed as shell is a redirection to a file called `{},`, and
+    // `node -e` was refused on the strength of it.
+    expect(blocked('node -e "setTimeout(() => {}, 1000)"')).toBe(false);
+    expect(blocked('node -e "const x = a > b ? 1 : 2; console.log(x)"')).toBe(false);
+    expect(blocked('python3 -c "print(1 if a > b else 2)"')).toBe(false);
   });
 
   it('blocks after a background operator', () => {
@@ -160,5 +170,99 @@ describe('shell environment', () => {
     expect(env.SystemRoot).toBe('C:\\Windows');
     expect(env.ComSpec).toBe('C:\\Windows\\cmd.exe');
     expect(env.SECRET).toBeUndefined();
+  });
+});
+
+/**
+ * From a live session: the agent ran `du -sh ... 2>/dev/null | sort -hr` and
+ * was refused with "Shell redirection outside workspace root — resolves to
+ * C:\dev\null". Discarding output is not a filesystem write, `2>/dev/null` is
+ * among the most common things anyone types into a shell, and the sandbox
+ * profile had always allowed exactly these paths — so the two halves of one
+ * policy disagreed about the same target.
+ */
+describe('redirecting to a device', () => {
+  it('allows discarding output', () => {
+    expect(checkShellPolicy('ls /nope 2>/dev/null', root).allowed).toBe(true);
+    expect(checkShellPolicy('ls > /dev/null', root).allowed).toBe(true);
+    expect(checkShellPolicy('ls 2>> /dev/null', root).allowed).toBe(true);
+  });
+
+  it('allows the other standard devices', () => {
+    expect(checkShellPolicy('echo hi > /dev/stdout', root).allowed).toBe(true);
+    expect(checkShellPolicy('echo hi > /dev/stderr', root).allowed).toBe(true);
+    expect(checkShellPolicy('echo hi > /dev/fd/2', root).allowed).toBe(true);
+  });
+
+  it('allows the Windows spelling of the null device', () => {
+    expect(checkShellPolicy('dir > NUL', root).allowed).toBe(true);
+    expect(checkShellPolicy('dir > nul', root).allowed).toBe(true);
+  });
+
+  it('still refuses a real path outside the workspace', () => {
+    // The exemption is for devices, not for anything shaped like one.
+    expect(checkShellPolicy('echo x > /tmp/escape.txt', root).allowed).toBe(false);
+    expect(checkShellPolicy('echo x > /dev/sda', root).allowed).toBe(false);
+    expect(checkShellPolicy('echo x > /dev/null/../escape.txt', root).allowed).toBe(false);
+  });
+});
+
+/**
+ * From a live session: the agent ran `ssh laptop "du -sh ..."` on a machine
+ * whose owner works over ssh daily, and was refused with advice to "adjust the
+ * shell policy". There was no adjustment that would have worked. The denylist
+ * was consulted before the allowlist and returned immediately, and the only
+ * configuration that existed added names to it, so a default denial was
+ * permanent and the advice pointed at nothing.
+ */
+describe('permitting a command denied by default', () => {
+  const withEnv = (vars: Record<string, string | undefined>, run: () => void) => {
+    const saved = { ...process.env };
+    Object.assign(process.env, vars);
+    try {
+      run();
+    } finally {
+      process.env = saved;
+    }
+  };
+
+  it('denies by default', () => {
+    withEnv({ TITAN_CODE_SHELL_ALLOWLIST: undefined, TITAN_CODE_SHELL_DENYLIST: undefined }, () => {
+      expect(checkShellPolicy('ssh laptop uptime', root).allowed).toBe(false);
+    });
+  });
+
+  it('lets the operator permit it on purpose', () => {
+    withEnv({ TITAN_CODE_SHELL_ALLOWLIST: 'ssh,git,npm', TITAN_CODE_SHELL_DENYLIST: undefined }, () => {
+      expect(checkShellPolicy('ssh laptop uptime', root).allowed).toBe(true);
+    });
+  });
+
+  it('keeps denying everything else that was denied by default', () => {
+    withEnv({ TITAN_CODE_SHELL_ALLOWLIST: 'ssh', TITAN_CODE_SHELL_DENYLIST: undefined }, () => {
+      // Permitting one command is not permitting the category.
+      expect(checkShellPolicy('curl https://example.com', root).allowed).toBe(false);
+      expect(checkShellPolicy('sudo ssh laptop uptime', root).allowed).toBe(false);
+    });
+  });
+
+  it('lets an explicit denial win over an explicit permission', () => {
+    withEnv({ TITAN_CODE_SHELL_ALLOWLIST: 'ssh', TITAN_CODE_SHELL_DENYLIST: 'ssh' }, () => {
+      expect(checkShellPolicy('ssh laptop uptime', root).allowed).toBe(false);
+    });
+  });
+
+  it('names the mechanism instead of advising the impossible', () => {
+    withEnv({ TITAN_CODE_SHELL_ALLOWLIST: undefined, TITAN_CODE_SHELL_DENYLIST: undefined }, () => {
+      const decision = checkShellPolicy('ssh laptop uptime', root);
+      expect(decision.suggestion).toContain('TITAN_CODE_SHELL_ALLOWLIST=ssh');
+    });
+  });
+
+  it('still sees a denied command hidden inside a wrapper script', () => {
+    withEnv({ TITAN_CODE_SHELL_ALLOWLIST: undefined, TITAN_CODE_SHELL_DENYLIST: undefined }, () => {
+      const decision = checkShellPolicy('powershell.exe -Command "ssh laptop uptime"', root);
+      expect(decision.allowed).toBe(false);
+    });
   });
 });

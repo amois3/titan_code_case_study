@@ -60,8 +60,11 @@ const PASSTHROUGH_WRAPPERS = new Set([
   'setsid', 'stdbuf', 'timeout', 'time', 'watch', 'xargs', 'sudo', 'doas'
 ]);
 
-/** Interpreters that take a program on the command line rather than a file. */
-const INLINE_SCRIPT_RUNNERS = new Map<string, string[]>([
+/**
+ * Shells that take a command on the command line. What follows the flag is
+ * shell source, so it can be parsed as one.
+ */
+const SHELL_SCRIPT_RUNNERS = new Map<string, string[]>([
   ['bash', ['-c']],
   ['sh', ['-c']],
   ['zsh', ['-c']],
@@ -70,7 +73,19 @@ const INLINE_SCRIPT_RUNNERS = new Map<string, string[]>([
   ['fish', ['-c']],
   ['pwsh', ['-c', '-command', '-Command', '-EncodedCommand']],
   ['powershell', ['-c', '-command', '-Command', '-EncodedCommand']],
-  ['cmd', ['/c', '/C', '/k', '/K']],
+  ['cmd', ['/c', '/C', '/k', '/K']]
+]);
+
+/**
+ * Other interpreters that take a program on the command line.
+ *
+ * What follows the flag is Python, JavaScript, Ruby or Perl — not shell. It is
+ * still worth scanning for the name of a command it might run, but parsing it
+ * as a shell command reads `=>` in `node -e "() => {}"` as a redirection to a
+ * file called `{},` — which is exactly what refused every `node -e` the model
+ * wrote, with a message about deleting things.
+ */
+const INTERPRETER_SCRIPT_RUNNERS = new Map<string, string[]>([
   ['python', ['-c']],
   ['python3', ['-c']],
   ['perl', ['-e', '-E']],
@@ -82,6 +97,28 @@ const INLINE_SCRIPT_RUNNERS = new Map<string, string[]>([
 
 /** Redirections that create or overwrite a file. */
 const WRITING_REDIRECTS = new Set(['>', '>>', '2>', '2>>', '&>', '&>>']);
+
+/**
+ * Redirection targets that are devices rather than files.
+ *
+ * `2>/dev/null` is among the most common things anyone writes in a shell, and
+ * the path check resolved it against the workspace — on Windows to
+ * `C:\dev\null` — and refused it as an escape. Nothing is written anywhere;
+ * discarding output is not a filesystem operation. The sandbox profile has
+ * always allowed exactly these, so the two halves of the policy disagreed
+ * about the same paths.
+ */
+const NULL_DEVICES = new Set([
+  '/dev/null', '/dev/stdout', '/dev/stderr', '/dev/tty',
+  'nul', 'nul:', 'con'
+]);
+
+function isDeviceTarget(target: string): boolean {
+  const normalized = target.trim().replace(/^["']|["']$/g, '').toLowerCase();
+  if (NULL_DEVICES.has(normalized)) return true;
+  // `/dev/fd/2` and friends address an already-open descriptor.
+  return /^\/dev\/fd\/\d+$/.test(normalized);
+}
 
 /**
  * Commands that write to a path given as an argument rather than through a
@@ -164,6 +201,33 @@ export function getShellDenylist(): string[] {
   return Array.from(new Set([...Array.from(DEFAULT_DENIED_COMMANDS), ...configured]));
 }
 
+/** Commands denied by this installation on purpose, rather than by default. */
+function getConfiguredDenylist(): string[] {
+  return parseCsvList(process.env.TITAN_CODE_SHELL_DENYLIST).map(name => name.trim().toLowerCase());
+}
+
+/**
+ * Whether a command is refused, given what the operator has asked for.
+ *
+ * The defaults above are a starting position, not a verdict. They were
+ * absolute: the denylist was consulted before the allowlist and returned
+ * immediately, and the only configuration that existed added more names to it.
+ * So `ssh` could never be permitted however the operator configured this — on
+ * a machine whose owner works over ssh daily — while the refusal advised them
+ * to "adjust the shell policy", which was advice about something that did not
+ * exist.
+ *
+ * Precedence, from strongest: a name the operator denied on purpose, then a
+ * name they allowed on purpose, then the defaults. Naming a command in the
+ * allowlist is a deliberate act with the workspace root and the confirm bar
+ * still in front of it; it is not a way to be surprised.
+ */
+function isCommandDenied(name: string, allowlist: string[]): boolean {
+  if (getConfiguredDenylist().includes(name)) return true;
+  if (allowlist.includes(name)) return false;
+  return DEFAULT_DENIED_COMMANDS.has(name);
+}
+
 export function buildShellEnv(options: ShellEnvOptions = {}): NodeJS.ProcessEnv {
   const source = options.env || process.env;
   const extraAllowlist = new Set(parseCsvList(source.TITAN_CODE_SHELL_ENV_ALLOWLIST).map(k => k.trim().toUpperCase()));
@@ -194,8 +258,23 @@ export function splitShellSegments(command: string): string[] {
  * Also reports any inline script so the caller can analyse it: `bash -c "curl
  * …"` runs curl, and a policy that stops at `bash` has not looked.
  */
-export function describeSegment(segment: ShellSegment): { names: string[]; inlineScripts: string[] } {
+export function describeSegment(segment: ShellSegment): {
+  names: string[];
+  /** Shell source handed to a shell; safe to parse as a command. */
+  inlineScripts: string[];
+  /** Source handed to a non-shell interpreter; not shell, and not parseable as one. */
+  interpreterScripts: string[];
+  /**
+   * The invocation with its wrappers stripped: `env timeout 5s git reset` ends
+   * up as `git reset`. Callers that need to read the program's own arguments —
+   * a subcommand, a flag — cannot get them from `names`, which holds only the
+   * program names, and re-deriving them per caller is how one guard ends up
+   * seeing through `sudo` and the next does not.
+   */
+  words: string[];
+} {
   const inlineScripts: string[] = [];
+  const interpreterScripts: string[] = [];
   const names: string[] = [];
   let words = segment.words.slice();
 
@@ -210,11 +289,14 @@ export function describeSegment(segment: ShellSegment): { names: string[]; inlin
     // unwrapping first would hide exactly that.
     names.push(name);
 
-    const scriptFlags = INLINE_SCRIPT_RUNNERS.get(name);
-    if (scriptFlags) {
+    const shellFlags = SHELL_SCRIPT_RUNNERS.get(name);
+    const interpreterFlags = INTERPRETER_SCRIPT_RUNNERS.get(name);
+    if (shellFlags || interpreterFlags) {
+      const flags = shellFlags ?? interpreterFlags!;
+      const into = shellFlags ? inlineScripts : interpreterScripts;
       for (let i = 1; i < words.length; i++) {
-        if (scriptFlags.includes(words[i]!) && words[i + 1] !== undefined) {
-          inlineScripts.push(words[i + 1]!);
+        if (flags.includes(words[i]!) && words[i + 1] !== undefined) {
+          into.push(words[i + 1]!);
         }
       }
       break;
@@ -234,7 +316,7 @@ export function describeSegment(segment: ShellSegment): { names: string[]; inlin
 
     break;
   }
-  return { names, inlineScripts };
+  return { names, inlineScripts, interpreterScripts, words };
 }
 
 export function extractCommandName(segment: string): string {
@@ -321,8 +403,14 @@ function denyDecision(commandName: string, segment: string): ShellPolicyDecision
     reason: `Shell command blocked by denylist: ${commandName}`,
     commandName,
     segment,
+    // Naming the mechanism, because the advice used to be to adjust a policy
+    // that could not be adjusted in this direction. Addressed to the operator:
+    // the model cannot set an environment variable for its own next run, and
+    // should not spend a turn trying.
     suggestion: DENIAL_SUGGESTIONS.get(commandName)
-      ?? 'Use an allowed non-root command or adjust the shell policy only if this is intentional.'
+      ?? `Denied by default. The operator can permit it deliberately by setting `
+        + `TITAN_CODE_SHELL_ALLOWLIST=${commandName},… before starting Titan Code; `
+        + 'the model cannot lift this itself, so report the block rather than working around it.'
   };
 }
 
@@ -342,7 +430,6 @@ export function checkShellPolicy(command: string, cwdRoot: string, depth = 0): S
 
   const parsed = parseCommand(command);
   const allowlist = getShellAllowlist();
-  const denylist = getShellDenylist();
   const hasAllowlist = allowlist.length > 0;
 
   // A substitution runs before the command that contains it, so it is checked
@@ -366,6 +453,7 @@ export function checkShellPolicy(command: string, cwdRoot: string, depth = 0): S
       if (!WRITING_REDIRECTS.has(redirection.operator)) continue;
       const target = redirection.target;
       if (!target || target.startsWith('&')) continue; // `2>&1` duplicates a descriptor
+      if (isDeviceTarget(target)) continue; // writes nothing to the filesystem
       if (!isPathInsideRoot(target, cwdRoot)) {
         return {
           allowed: false,
@@ -402,13 +490,13 @@ export function checkShellPolicy(command: string, cwdRoot: string, depth = 0): S
       }
     }
 
-    const { names, inlineScripts } = describeSegment(segment);
+    const { names, inlineScripts, interpreterScripts } = describeSegment(segment);
     if (!names.length) continue;
 
     // Judge every name in the chain: a forbidden wrapper is forbidden even
     // when what it wraps would be fine on its own.
     for (const name of names) {
-      if (denylist.includes(name)) return denyDecision(name, segment.text);
+      if (isCommandDenied(name, allowlist)) return denyDecision(name, segment.text);
     }
 
     // The allowlist applies to the program that actually runs. Requiring the
@@ -423,6 +511,23 @@ export function checkShellPolicy(command: string, cwdRoot: string, depth = 0): S
         segment: segment.text,
         suggestion: 'Use a command already on the allowlist or extend the allowlist intentionally.'
       };
+    }
+
+    // A Python or JavaScript one-liner is not shell and cannot be parsed as
+    // one, but it can still hand a command to the system. Scanning its words
+    // for a denied name catches `python -c "os.system('curl …')"` without
+    // reading `() => {}` as a redirection.
+    for (const script of interpreterScripts) {
+      for (const token of script.split(/[^A-Za-z0-9_./\\-]+/)) {
+        if (token.length < 2) continue;
+        const name = normalizeCommandName(token);
+        if (name && isCommandDenied(name, allowlist)) {
+          return {
+            ...denyDecision(name, segment.text),
+            reason: `Denied command inside ${effective} script: ${name}`
+          };
+        }
+      }
     }
 
     for (const script of inlineScripts) {

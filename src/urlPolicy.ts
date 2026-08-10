@@ -65,18 +65,33 @@ function isPrivateV4(parts: number[]): boolean {
 }
 
 function isPrivateV6(hostname: string): boolean {
-  const normalized = hostname.toLowerCase();
+  // A zone index — fe80::1%eth0 — names an interface, not a different host.
+  const normalized = hostname.toLowerCase().split('%')[0] ?? '';
   if (normalized === '::1') return true;
+  // The unspecified address. Connecting to it reaches the local host on most
+  // stacks, so letting it through was a way to loopback that read as neither.
+  if (normalized === '::' || normalized === '0:0:0:0:0:0:0:0') return true;
   if (normalized.startsWith('fc') || normalized.startsWith('fd')) return true; // ULA
   if (normalized.startsWith('fe80:')) return true; // link-local
-  // IPv4-mapped :ffff:127.0.0.1 etc.
-  const mapped = normalized.match(/:ffff:(\d+\.\d+\.\d+\.\d+)$/i);
-  if (mapped?.[1]) {
-    const parts = mapped[1].split('.').map((n) => Number(n));
+
+  // IPv4-mapped, dotted: ::ffff:127.0.0.1
+  const dotted = normalized.match(/:ffff:(\d+\.\d+\.\d+\.\d+)$/i);
+  if (dotted?.[1]) {
+    const parts = dotted[1].split('.').map((n) => Number(n));
     if (parts.length === 4 && parts.every((n) => Number.isFinite(n))) {
       return isPrivateV4(parts);
     }
   }
+
+  // IPv4-mapped, hex: ::ffff:7f00:1 is 127.0.0.1 and was allowed through —
+  // the same address as the dotted form above, written the way a URL keeps it.
+  const hex = normalized.match(/^(?:0*:)*:ffff:([0-9a-f]{1,4}):([0-9a-f]{1,4})$/i);
+  if (hex) {
+    const high = Number.parseInt(hex[1]!, 16);
+    const low = Number.parseInt(hex[2]!, 16);
+    return isPrivateV4([high >> 8, high & 0xff, low >> 8, low & 0xff]);
+  }
+
   return false;
 }
 

@@ -2,7 +2,7 @@
   "name": "titan-code-case-study",
   "version": "1.0.0",
   "private": true,
-  "description": "Extracted, runnable modules from Titan Code \u0432\u0402\u201d the shell lexer, the policy over it, path containment, the OS sandbox, and the repeat guard",
+  "description": "Extracted, runnable modules from Titan Code: the shell lexer, the policy over it, the workspace guard, path containment, the OS sandbox, SSRF checks and the repeat guard",
   "scripts": {
     "test": "vitest run",
     "test:watch": "vitest",

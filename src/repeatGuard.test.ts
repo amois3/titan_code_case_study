@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { ABORT_AFTER, RepeatGuard, WARN_AFTER, describeCall } from './repeatGuard';
+import {
+  ABORT_AFTER,
+  NO_PROGRESS_ABORT_AFTER,
+  NO_PROGRESS_WARN_AFTER,
+  RepeatGuard,
+  WARN_AFTER,
+  describeCall
+} from './repeatGuard';
 
 /**
  * The behaviour under test came from a real session.
@@ -68,6 +75,57 @@ describe('repeat guard', () => {
     call(guard, 'cd /etc');
     call(guard, 'cd /etc');
     expect(call(guard, 'cat /etc/passwd').count).toBe(1);
+  });
+
+  it('warns about a call that keeps succeeding without going anywhere', () => {
+    const guard = new RepeatGuard();
+    let verdict = guard.record('list_directory', { path: '.' }, true);
+    for (let i = 1; i < NO_PROGRESS_WARN_AFTER; i++) {
+      verdict = guard.record('list_directory', { path: '.' }, true);
+    }
+    expect(verdict.warning).toContain('will not change');
+    expect(verdict.abort).toBeUndefined();
+  });
+
+  it('ends the turn when the same successful call is repeated past the limit', () => {
+    const guard = new RepeatGuard();
+    let verdict = guard.record('list_directory', { path: '.' }, true);
+    for (let i = 1; i < NO_PROGRESS_ABORT_AFTER; i++) {
+      verdict = guard.record('list_directory', { path: '.' }, true);
+    }
+    expect(verdict.abort).toContain('same call was made');
+    expect(verdict.abort).toContain('list_directory(.)');
+  });
+
+  it('lets a different successful call clear the no-progress streak', () => {
+    const guard = new RepeatGuard();
+    for (let i = 0; i < NO_PROGRESS_ABORT_AFTER - 1; i++) {
+      guard.record('read_file', { filePath: 'a.ts' }, true);
+    }
+    const verdict = guard.record('read_file', { filePath: 'b.ts' }, true);
+    expect(verdict.count).toBe(1);
+    expect(verdict.abort).toBeUndefined();
+  });
+
+  it('does not count polling a background job as a loop', () => {
+    // exec_shell_wait is meant to be called again with the same jobId: the
+    // job advances even though the arguments do not.
+    const guard = new RepeatGuard();
+    let verdict = guard.record('exec_shell_wait', { jobId: 'job_1' }, true);
+    for (let i = 1; i < NO_PROGRESS_ABORT_AFTER + 3; i++) {
+      verdict = guard.record('exec_shell_wait', { jobId: 'job_1' }, true);
+    }
+    expect(verdict.warning).toBeUndefined();
+    expect(verdict.abort).toBeUndefined();
+  });
+
+  it('catches a streak that alternates between failing and succeeding', () => {
+    const guard = new RepeatGuard();
+    let verdict = guard.record('grep_search', { pattern: 'todo' }, false);
+    for (let i = 1; i < NO_PROGRESS_ABORT_AFTER; i++) {
+      verdict = guard.record('grep_search', { pattern: 'todo' }, i % 2 === 0);
+    }
+    expect(verdict.abort).toBeDefined();
   });
 
   it('names the offending call so the message is actionable', () => {

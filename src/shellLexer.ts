@@ -202,6 +202,23 @@ export function parseCommand(source: string): ParsedCommand {
       continue;
     }
 
+    // `2>&1` and `1>&2` duplicate a file descriptor; they name no file. Read as
+    // a redirection they produced a target of `&1`, and the workspace guard
+    // then refused the command as destroying a file called `1` — so every
+    // ordinary `npm test 2>&1` was blocked with a message about deleting
+    // things.
+    const duplication = /^(?:[0-9]*>&[0-9]+-?|[0-9]*<&[0-9]+-?)/.exec(source.slice(i));
+    if (duplication) {
+      // The leading descriptor may already have been read as part of a word.
+      if (/^[0-9]$/.test(current) && currentHasContent) {
+        current = '';
+        currentHasContent = false;
+      }
+      pushWord();
+      i += duplication[0].length - 1;
+      continue;
+    }
+
     const redirect = isRedirectAt(source, i);
     if (redirect) {
       // `2>` is written as a digit glued to the operator; that digit was read

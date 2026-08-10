@@ -39,11 +39,12 @@ by `/allow add all` for an explicit full bypass. Auto-accept mode auto-approves
 
 ## 1c. Secrets storage
 
-API keys from `/secrets` live in a `SecretStore`. The default backend is
+API keys from `/secrets` live in a `SecretStore`. There is one backend:
 `~/.config/titan-code/secrets.json` with mode `600` where the OS honours it.
-`TITAN_CODE_SECRETS_BACKEND=keychain` is reserved for a future OS keychain /
-DPAPI adapter; until that ships, the file backend remains active so the product
-never claims encryption it does not provide.
+An OS keychain / DPAPI adapter can be added behind the same interface. Until
+one exists there is no setting to choose between, because a setting whose two
+values resolve to the same file store reads as encryption the product does not
+provide.
 
 ## 1b. Outbound fetch
 

@@ -185,7 +185,18 @@ export function defaultPolicy(workspaceRoot: string): SandboxPolicy {
   return { writableRoots: writable, allowNetwork: networkAllowed() };
 }
 
-function bubblewrapArgs(policy: SandboxPolicy, workdir: string): string[] {
+/**
+ * Arguments that express the policy to bubblewrap.
+ *
+ * Exported because this is the sandbox: everything else in this file selects a
+ * backend or reports on one, while these arguments are what the kernel is
+ * actually told. Kept private, the only way to reach them was to run on a host
+ * with a working bubblewrap, so on every other machine — including the one
+ * this is developed on — the security-defining code was never executed by
+ * anything, tests included. That is the whole of why this module sits at a
+ * third the coverage of its neighbours.
+ */
+export function bubblewrapArgs(policy: SandboxPolicy, workdir: string): string[] {
   const args = [
     // Everything is visible but read-only; the writable set is added back
     // explicitly below. Read access is deliberately broad: toolchains live
@@ -201,8 +212,18 @@ function bubblewrapArgs(policy: SandboxPolicy, workdir: string): string[] {
 
   for (const root of policy.writableRoots) {
     const real = realResolve(root);
+    // A root that does not exist cannot be bound, and binding it would fail
+    // the whole invocation. Skipping it is right; skipping all of them is not,
+    // and that case is caught by the caller rather than passed on as a sandbox
+    // in which nothing at all can be written.
     if (existsSync(real)) args.push('--bind', real, real);
   }
+
+  // Its own process namespace, so the confined command cannot see or signal
+  // anything on the host. Without it a command that may write only inside the
+  // workspace can still send a signal to any process the user owns, which is
+  // not the boundary this is meant to draw. Requires the --proc above.
+  args.push('--unshare-pid');
 
   if (!policy.allowNetwork) args.push('--unshare-net');
 
@@ -217,7 +238,7 @@ function bubblewrapArgs(policy: SandboxPolicy, workdir: string): string[] {
  * bubblewrap policy so the two platforms behave the same way rather than
  * merely both being "sandboxed".
  */
-function seatbeltProfile(policy: SandboxPolicy): string {
+export function seatbeltProfile(policy: SandboxPolicy): string {
   const lines = [
     '(version 1)',
     '(allow default)',
@@ -250,6 +271,21 @@ export function planSandbox(
   workdir: string
 ): SandboxPlan {
   const { backend, binary, reason } = detectSandbox();
+
+  // Confinement with nothing writable is not confinement, it is a command that
+  // cannot do its job. It happens when every root has been removed underneath
+  // us — a deleted workspace, a vanished temp directory — and it is better to
+  // say so than to hand back a sandbox that fails every write for a reason the
+  // error will not explain.
+  const writable = policy.writableRoots.filter((root) => existsSync(realResolve(root)));
+  if (backend !== 'none' && writable.length === 0) {
+    return {
+      backend: 'none',
+      command: shellCommand,
+      args: shellArgs,
+      unavailableReason: `no writable root exists (${policy.writableRoots.join(', ')}); refusing to confine to nothing`
+    };
+  }
 
   if (backend === 'bubblewrap' && binary) {
     return {

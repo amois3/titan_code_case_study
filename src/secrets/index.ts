@@ -1,6 +1,6 @@
 import { SECRETS_FILE } from '../paths';
 import { FileSecretStore } from './fileStore';
-import type { SecretBackendKind, SecretStore } from './store';
+import type { SecretStore } from './store';
 
 export type { SecretBackendKind, SecretStore } from './store';
 export { FileSecretStore } from './fileStore';
@@ -10,25 +10,19 @@ let cached: SecretStore | null = null;
 /**
  * Returns the active secret store.
  *
- * Backend selection:
- * - `TITAN_CODE_SECRETS_BACKEND=file` (default) — JSON under config dir
- * - `keychain` is reserved; falls back to file with a one-line note until a
- *   native module is wired (keytar / DPAPI). Shipping a broken keychain claim
- *   would be worse than an honest file store.
+ * There is one backend: JSON under the config directory, mode 600 where the OS
+ * honours it. A keychain adapter (keytar / DPAPI) can be added behind the same
+ * interface, and until one exists there is nothing to select between —
+ * announcing a choice that resolves to the same store either way reads as
+ * encryption the product does not provide.
  */
 export function getSecretStore(): SecretStore {
   if (cached) return cached;
 
-  const requested = (process.env.TITAN_CODE_SECRETS_BACKEND || 'file').toLowerCase();
-  const kind: SecretBackendKind = requested === 'keychain' ? 'keychain' : 'file';
-
-  if (kind === 'keychain') {
-    // Placeholder: when a keychain adapter exists, construct it here.
-    // Until then, file storage remains the only production backend.
-    cached = new FileSecretStore(SECRETS_FILE);
-  } else {
-    cached = new FileSecretStore(SECRETS_FILE);
-  }
+  // `keychain` used to take its own branch, which constructed exactly the same
+  // file store as the other one. Two spellings of one behaviour read as a
+  // choice that exists; there is one backend until a native adapter is wired.
+  cached = new FileSecretStore(SECRETS_FILE);
   return cached;
 }
 

@@ -14,8 +14,12 @@ import { defaultPolicy, planSandbox } from './sandbox';
  *
  * So the order is: a real POSIX shell wherever one exists — including Git Bash
  * on Windows, which any machine with git already has — then PowerShell, then
- * cmd. The shell in use is reported so the agent and the operator can see
- * which syntax is in force rather than guess.
+ * cmd.
+ *
+ * The choice is then told to both audiences that have to live with it: the
+ * operator through /help and /status, and the model through
+ * describeShellForPrompt below. That second half was missing, and this comment
+ * claimed otherwise while the agent was left to discover the syntax by failing.
  */
 
 export type ShellKind = 'posix' | 'powershell' | 'cmd';
@@ -189,6 +193,55 @@ export function detectShell(): ShellRuntime {
 /** Test seam: forget the detected shell so the next call probes again. */
 export function resetShellCache(): void {
   cached = null;
+}
+
+/**
+ * What the model needs to know about the shell it is about to use.
+ *
+ * The detected shell was reported to `/help` and `/status` and nowhere else,
+ * so the operator could see it and the agent could not. On Windows that gap
+ * has a predictable cost: the machine is Windows, the task is a Windows task,
+ * the tool is called `run_bash` with no further detail — and the model reaches
+ * for PowerShell, gets a syntax error, and has to find the boundary by hitting
+ * it. Three wasted calls to learn something the process already knew at
+ * startup.
+ *
+ * Kept next to the detection it describes, so the two cannot drift apart.
+ */
+export function describeShellForPrompt(): string {
+  const shell = detectShell();
+  const lines = [`Shell used by run_bash: ${shell.label}`];
+
+  if (shell.kind === 'posix') {
+    lines.push('It is a POSIX shell. Write POSIX syntax: single quotes, $VAR, &&, ||, rm, ls, grep.');
+    if (process.platform === 'win32') {
+      lines.push(
+        'This is Windows, but the shell is not PowerShell or cmd. PowerShell syntax ' +
+        '($x = @(...), Remove-Item, Get-ChildItem, -Force) is a syntax error here.'
+      );
+      lines.push(
+        'Backslashes are escape characters: write C:/Users/name/file or quote the path ' +
+        "as 'C:\\Users\\name\\file'."
+      );
+      lines.push(
+        'If a task genuinely needs PowerShell, invoke it on purpose rather than by habit: ' +
+        'powershell.exe -NoProfile -Command \'...\' — single quotes, because inside double quotes ' +
+        'this shell expands $_ and $variables before PowerShell ever sees them, and $_.Name arrives ' +
+        'as something else entirely. For anything longer than one line, write a .ps1 file and run that.'
+      );
+    }
+  } else if (shell.kind === 'powershell') {
+    lines.push('It is PowerShell. Use PowerShell syntax and cmdlets.');
+    lines.push(
+      'POSIX idioms do not carry over: ls -la, grep, rm -rf, and $VAR mean something ' +
+      'else or nothing at all. Use Get-ChildItem, Select-String, Remove-Item, $env:VAR.'
+    );
+  } else {
+    lines.push('It is cmd.exe. Use cmd syntax: %VAR%, dir, del, copy.');
+    lines.push('Neither POSIX nor PowerShell idioms work here; && chains but || does not behave the same.');
+  }
+
+  return lines.join('\n');
 }
 
 export interface SpawnShellOptions {
