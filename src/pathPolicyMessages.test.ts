@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'fs';
+import { mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'fs';
 import { homedir, tmpdir } from 'os';
 import { join, resolve } from 'path';
 import {
@@ -65,7 +65,17 @@ describe('what a refusal says', () => {
   });
 
   it('says nothing about a link when there is not one', () => {
-    expect(formatPathOutsideRootMessage('/etc/passwd', root)).not.toContain('symlink');
+    // The path has to be one with no link anywhere along it, and `/etc` is not
+    // that path: on macOS it is a link to `/private/etc`, so the message named
+    // one — correctly — and this test failed for being wrong rather than the
+    // code being wrong. A directory created here and resolved through
+    // realpathSync is canonical on every platform.
+    const outside = realpathSync(mkdtempSync(join(tmpdir(), 'titan-code-plain-')));
+    try {
+      expect(formatPathOutsideRootMessage(join(outside, 'file.txt'), root)).not.toContain('symlink');
+    } finally {
+      rmSync(outside, { recursive: true, force: true });
+    }
   });
 });
 
