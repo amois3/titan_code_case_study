@@ -1,4 +1,4 @@
-# Titan Code — the security core, extracted
+# Titan Code — engineering case study and security core
 
 [![CI](https://github.com/amois3/titan_code_case_study/actions/workflows/ci.yml/badge.svg)](https://github.com/amois3/titan_code_case_study/actions/workflows/ci.yml)
 [![Node](https://img.shields.io/badge/node-%E2%89%A520-3c873a?logo=node.js&logoColor=white)](package.json)
@@ -7,15 +7,15 @@
 [![Titan Code](https://img.shields.io/badge/Titan%20Code-v3.4.2-6f42c1)](#the-product-this-comes-from)
 [![License](https://img.shields.io/badge/license-MIT-yellow)](LICENSE)
 
-Titan Code is a terminal coding agent I wrote in TypeScript: its own tool loop,
-its own ANSI renderer, MCP over stdio and Streamable HTTP, and OS-level
-confinement for shell commands. The implementation is private. I walk through
-the code in interviews.
+Titan Code is a terminal coding agent I wrote in TypeScript: its own agent loop,
+ANSI renderer, MCP client, multimodal computer vision and OS-level confinement
+for shell commands. The same agent can read a codebase, understand screenshots,
+operate a browser or Windows desktop, call tools and verify the result. The full
+implementation is private; I walk through it in interviews.
 
-This repository is not a description of it. It is the part that answers the
-question the product exists to answer — *what stops a language model from
-doing damage on my machine* — lifted out with its tests and its CI, so it can
-be read, run and disagreed with.
+This public repository documents how those capabilities fit together and
+includes the extracted security core with its tests and CI. It can be read and
+run without an API key or access to the private product.
 
 ```bash
 npm ci && npm test          # 255 tests, no API key, no network, no product
@@ -29,34 +29,32 @@ times the Actions allowance for the same platform signal.
 
 Titan Code has grown well beyond the snapshot this repository isolates. The
 current product is v3.4.2: 227 TypeScript modules, 4,000+ tests across 257
-files, 41 slash commands and 46 built-in tools. It now drives a browser and,
-on Windows, the desktop as well as a codebase; provider adapters share one
-streaming and tool-call contract; long autonomous runs retain a durable,
-auditable record of what was actually completed.
+files, 41 slash commands and 46 built-in tools. It drives a browser and, on
+Windows, the desktop as well as a codebase. Native multimodal messages let it
+reason over image attachments and live screenshots, while provider adapters
+share one streaming and tool-call contract and autonomous runs retain a
+durable record of what was actually completed.
 
 This repository stays deliberately narrow. It remains the zero-runtime-
 dependency security argument that can be read and executed without an API key
 or access to the private product. The numbers below describe this repository;
 the product snapshot near the end is dated and labelled separately.
 
-## What changed in the full product
+## What the full product delivers
 
-The implementation stays private; these are the engineering outcomes, not a
-second source dump.
+The implementation stays private; these are the product capabilities and the
+engineering choices that make them dependable.
 
-**Silence became an explicit failure state.** A run now distinguishes model
-thinking, tool execution, waiting, rate limiting and a provider returning
-nothing. Empty completions stop with a useful diagnosis instead of leaving a
-spinner as the only evidence that anything happened. Provider errors retain
-the part that matters — malformed tool state, entitlement, quota or transport
-failure — without pretending that switching models fixes every one of them.
+**Every run stays observable.** The terminal distinguishes model thinking, tool
+execution, waiting, retries and provider responses. Live progress, elapsed
+time, steps and tool outcomes make long autonomous work understandable while
+it is happening, and every stop has a concrete explanation.
 
 **The terminal owns its geometry.** Model output, tool progress, navigation,
 the input editor, confirmation UI and the status line have separate rows and
 separate state. Repainting one cannot splice the chat input into a response.
 Transcript navigation, mouse selection, wheel scrolling, input history and
-vertical confirmation choices are treated as product behaviour and covered by
-regression tests, not terminal folklore.
+vertical confirmation choices are first-class, tested product behaviour.
 
 **A provider is an adapter, not another agent loop.** OpenAI Responses, OpenAI
 Chat Completions, Anthropic Messages and Gemini-style streams are normalised
@@ -65,17 +63,22 @@ Model catalogues, prompt-cache metadata, prices and quota state sit outside the
 loop, so adding a provider does not fork confirmation, persistence or retry
 semantics.
 
-**Browser work has to leave evidence.** The agent prefers a semantic browser
-transport with stable tab and control handles; pixel-level computer use is an
-explicit fallback. Form values retain their source, a successful action is
-recorded only after the page confirms it, and an interrupted long job can be
-resumed from a durable record. “Done” is therefore a checked state, not a
-sentence the model happened to write.
+**Computer vision is part of the agent loop.** Screenshots and image attachments
+travel as native multimodal content rather than base64 text. The model can see
+the active application, choose a tool action, map coordinates from a resized
+image back to the real display and validate the next frame. A bounded
+screenshot window keeps visual context useful without allowing old images to
+consume the session budget.
 
-**Autonomy has brakes.** Repeated failing calls, repeated writes to the same
-form field, stalled polling and runs that make no progress are detected as
-patterns. The system warns first where recovery is plausible, stops where it
-is not, and preserves what really happened for the next session.
+**Browser and desktop work leaves evidence.** The agent prefers a semantic
+Chrome transport with stable tab and control handles, then uses visual
+computer control for native dialogs and applications. Form values retain their
+source, successful actions are recorded after page confirmation, and an
+interrupted job can resume from a durable record.
+
+**Autonomy remains controlled.** Repeat guards, scoped confirmations, durable
+journals and resumable sessions let the agent work for a long time while
+keeping actions reviewable and preventing unproductive loops.
 
 ---
 
@@ -98,16 +101,12 @@ snapshot of the three design documents that shipped with the extraction.
 | [`secrets/`](src/secrets) | 133 | Credential storage, and an honest statement of what it does not encrypt |
 | [`paths.ts`](src/paths.ts) | 34 | The XDG locations the secret store writes to |
 
-## The problem
+## The operating model
 
-An agent that can only suggest is safe and not very useful. An agent that can
-edit files and run commands is useful and cannot be trusted by construction:
-it is driven by a model that reads content nobody vetted — source files, web
-pages, whatever a repository happens to contain.
-
-So the question is never *will the model behave*. It is *what happens when it
-does not*, and the answer has to hold without depending on the model's
-cooperation.
+Titan Code combines broad capability with boundaries enforced outside the
+model. The model can edit files, run commands and operate applications, while
+the runtime decides where it may write, which actions need consent and what
+must remain recoverable.
 
 Four layers, each catching what the one before it cannot:
 
@@ -123,71 +122,40 @@ Across all four runs a fifth question that none of them asks: *is this
 destroying something that exists nowhere else?* That one is
 [`workspaceGuard.ts`](src/workspaceGuard.ts), below.
 
-## Why the lexer
+## How command analysis works
 
-The first version split on `&& || ; |` and took the first word. It missed ten
-spellings of the same call — found by writing them down and running them, not
-by reading the code:
+The lexer turns shell text into structured syntax before policy is applied.
+Wrappers, substitutions, interpreters, redirects and argument-based writers are
+recognised as operations rather than judged by their first word:
 
-| Spelling | Why it got through |
+| Form | What Titan understands |
 |---|---|
-| `echo $(curl …)` | substitutions were never looked inside |
-| `` echo `curl …` `` | same, with backticks |
-| `/usr/bin/curl …` | the denylist held bare names |
-| `env curl …` | the wrapper's name was reported instead |
-| `echo url \| xargs curl` | same |
-| `bash -c "curl …"` | the interpreter's name was reported |
-| `sleep 1 & curl …` | a single `&` was not a separator |
-| `echo x > /etc/thing` | redirections were not examined |
-| `echo x \| tee /etc/thing` | writes through arguments, not `>` |
-| `dd of=/etc/thing` | destination hidden in an assignment |
+| `echo $(curl …)` | a nested command substitution |
+| `/usr/bin/curl …` | the executable name after path normalisation |
+| `env curl …` | a wrapper followed by the command it launches |
+| `bash -c "curl …"` | a shell script that needs recursive analysis |
+| `echo x > /etc/thing` | a filesystem write through redirection |
+| `dd of=/etc/thing` | a destination supplied as an argument assignment |
 
-All ten are closed, and all ten are in [`shellPolicy.test.ts`](src/shellPolicy.test.ts).
-Substitutions and inline interpreter scripts are analysed recursively, because
-a substitution is an ordinary command that happens to be written inside
-another one.
+Each form is covered by regression tests in
+[`shellPolicy.test.ts`](src/shellPolicy.test.ts). Substitutions and shell
+scripts are analysed recursively, while other interpreter payloads use
+language-appropriate signals instead of being mistaken for shell syntax.
 
-The fix also introduced a bug worth keeping in the record. Treating `\` as an
-escape inside double quotes is correct for POSIX and wrong for the thing the
-agent is actually handed: `cd "C:\Users\dev"` became `cd "C:Usersdev"`, which
-resolved *inside* the workspace and was allowed to run. One constant now says
-exactly which characters a backslash escapes, and the reason is written above
-it in [`shellLexer.ts`](src/shellLexer.ts).
+## Security that remains useful
 
-## The failure mode nobody counts: refusing ordinary work
+The policy distinguishes actual destructive behaviour from ordinary
+development work. File-descriptor duplication, creation of a new file and an
+inline JavaScript or Python program are classified according to what they do,
+so common commands keep moving without weakening containment. Confirmations
+are reserved for actions whose effect or recoverability genuinely warrants
+human review.
 
-A guard that blocks work people legitimately do gets switched off, and a
-switched-off guard protects nothing. That failure never shows up in a security
-review, because every individual refusal looks like the system working.
+## Recoverability-aware destructive operations
 
-Three of them shipped, and all three came from the same place — reading a
-command more literally than a shell does:
-
-| Command | What the guard saw | What it is |
-|---|---|---|
-| `npm test 2>&1` | a redirect into a file called `1` | duplicating a file descriptor; it names no file |
-| `echo x > out.txt` | a truncating write, refused outside a git repository | creating a file that does not exist yet |
-| `node -e "setTimeout(() => {}, 30_000)"` | `=>` read as a redirect into a file called `{},` | JavaScript, which is not shell and cannot be lexed as it |
-
-Each was refused with a message about destroying things, for a command that
-destroyed nothing. The fixes are narrow and each has a regression test:
-descriptor duplication is recognised in the lexer; a truncating write is
-destruction only when the target exists (a pattern like `rm -rf *` still
-counts, since it names no path that exists under that spelling); and only real
-shells get their `-c` argument re-lexed as a command.
-
-The last one had a second half. Not parsing `python -c "…"` as shell loses
-whatever the old reading caught by luck, so what the interpreter is handed is
-now scanned for the *name* of a command instead — which catches
-`python -c "os.system('curl …')"`, something the shell re-parse never did.
-
-## Why git decides what may be destroyed
-
-`git reset --hard`, `git clean -fd` and `rm -rf src` are routine against a
-clean tree and unrecoverable against a dirty one. The same command, the same
-words, opposite consequences — so refusing them by name would make the agent
-useless at exactly the moments it should be tidying up, and allowing them by
-name loses an afternoon of uncommitted work.
+Destructive commands are evaluated in context rather than denied by name. A
+clean, recoverable tree can be maintained automatically, while uncommitted or
+untracked work receives stronger protection.
 
 [`workspaceGuard.ts`](src/workspaceGuard.ts) asks git instead. It classifies
 what a command would take — modifications to tracked files, untracked files, a
@@ -201,53 +169,33 @@ repositories built per test, because the question the guard asks — *what would
 actually be lost* — is answered by git, and a mocked answer would be a test of
 the mock.
 
-## Why the kernel
+## Kernel-enforced containment
 
-Reading a command string can narrow risk. It cannot bound it:
+Command analysis provides an early policy layer; the operating system provides
+the final write boundary. bubblewrap on Linux and Seatbelt on macOS confine the
+process even when a destination is assembled dynamically at runtime.
+[`sandbox.test.ts`](src/sandbox.test.ts) verifies allowed workspace writes and
+blocked external writes against the real backend.
 
-```bash
-p=$(printf '%s' "/etc/passwd"); printf '%s' x > "$p"
-```
+Backends are capability-probed before use, not selected merely because a binary
+exists. CI makes the security backend mandatory on supported runners, so the
+containment guarantee is exercised on every push.
 
-The destination is assembled at runtime, inside the shell. No analysis of the
-command text can see it. The kernel refuses the write anyway — and
-[`sandbox.test.ts`](src/sandbox.test.ts) proves it by writing a file inside the
-workspace, writing one outside it, and asserting the second did not happen.
+## Cross-platform verification
 
-**Presence is not capability.** bubblewrap needs unprivileged user namespaces,
-which containers and CI runners routinely disable. Selecting it because the
-binary exists made every shell command fail on GitHub's Ubuntu runners. The
-backend is now asked to run `exit 0` before it is trusted, and falls back to no
-confinement with the reason stated rather than breaking the tool.
-
-**A skipped security test reads as a passing one.** With
-`TITAN_CODE_REQUIRE_SANDBOX=1` — which the Linux and macOS jobs set — the
-absence of a backend fails the suite instead of quietly stepping aside.
-
-## Testing what this machine cannot run
-
-`sandbox.ts` and `shellRuntime.ts` decide what confines a command and what
-interprets it, and both branch on the platform. Written on Windows, most of
-each file was therefore never executed by anything, tests included — including
-the half that defines the security boundary.
-
-Two test files stand the platform and the binaries in for that: what is under
-test is the decision, not the kernel underneath it. bubblewrap present and
-working, present and unable to create a namespace, present and unrunnable,
-absent; Seatbelt the same; the decision made once per process; the refusal to
-confine a command to *nothing* when every writable root has been deleted
-underneath it. And on the shell side: Git Bash preferred, a `bash.exe` left
-behind by an uninstall that exists and will not start, the fall through to
-PowerShell and then cmd, an override naming a program that is not there.
+`sandbox.ts` and `shellRuntime.ts` separate platform decisions from process
+execution. Their tests cover bubblewrap, Seatbelt, Git Bash, PowerShell and cmd
+through injected capabilities, while the CI matrix runs the complete project on
+Linux, macOS and Windows.
 
 `sandbox.ts` went from 56% to 99% of statements this way, `shellRuntime.ts`
 from 67% to 86% — numbers that matter only because of *which* lines they are.
 
-## Why containment is not string comparison
+## Symlink-aware path containment
 
-A symlink placed inside the workspace and pointing outside produces a path that
-reads as contained while the file it designates is not. The agent reads
-repositories it did not write, so that is not hypothetical.
+Containment follows every existing path component through symlinks before a
+write is classified, so the effective destination — not its spelling — defines
+the security boundary.
 
 `realpathSync` cannot be used on its own: it throws for a path that is not
 fully present — the normal case when a file is about to be created — and for a
@@ -255,12 +203,9 @@ dangling link, even though writing through that link still lands wherever it
 points. So the path is walked one component at a time, and each existing
 component is dereferenced.
 
-The macOS case is the one that cost three red CI jobs: `/var` is a link to
-`/private/var`, so following an absolute symlink target without re-resolving
-*its* ancestors left the workspace root and a file inside it with different
-prefixes, and a file plainly inside the workspace was refused as foreign.
-[`pathPolicy.test.ts`](src/pathPolicy.test.ts) builds that shape on any
-platform.
+The same canonicalisation also handles macOS aliases such as `/var` and
+`/private/var`. [`pathPolicy.test.ts`](src/pathPolicy.test.ts) builds these
+filesystem shapes on every platform.
 
 ## Running it
 
@@ -291,7 +236,8 @@ memory:
 | CI | Linux, macOS and Windows on Node 20, 22 and 24, plus coverage, build smoke tests and a production dependency audit |
 | Slash commands | 41 |
 | Agent tools | 46, 20 of them behind a confirmation |
-| Browser and desktop | semantic Chrome extension transport plus OS-level computer use on Windows |
+| Computer vision | native multimodal screenshots and image attachments, vision routing, bounded visual context and coordinate mapping |
+| Browser and desktop | semantic Chrome extension transport plus visually guided OS-level computer use on Windows |
 | Terminal layer | 13 modules, written directly against ANSI — no Ink, no React, no curses |
 | Runtime dependencies | 7 |
 
@@ -317,8 +263,8 @@ These ship with the product and are copied here unchanged.
 | [SECURITY.md](docs/SECURITY.md) | the four layers, and what each one leaves open |
 | [DECISIONS.md](docs/DECISIONS.md) | why the design is what it is, and what each choice cost |
 
-`SECURITY.md` has a section called *What this does not cover*. A security
-document that lists only strengths is not describing a real system.
+`SECURITY.md` makes the trust boundary explicit, so the guarantees described
+here remain concrete and testable.
 
 ## Licence
 
