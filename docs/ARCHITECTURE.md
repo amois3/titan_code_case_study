@@ -48,7 +48,7 @@ issues the call, rather than letting the turn end with a promise and no work.
 
 ## The terminal layer
 
-`src/screen/` is 14 modules and no dependencies.
+`src/screen/` is 13 modules and no dependencies.
 
 ```
 renderer.ts        ANSI primitives: alternate buffer, scroll regions, cursor

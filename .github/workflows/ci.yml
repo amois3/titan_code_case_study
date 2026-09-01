@@ -9,6 +9,11 @@ on:
   pull_request:
   workflow_dispatch:
 
+# A new push supersedes an older run for the same branch.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   verify:
     name: ${{ matrix.os }} · node ${{ matrix.node }}
@@ -17,8 +22,15 @@ jobs:
       # One platform failing should not hide the state of the others.
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
-        node: ['20', '22', '24']
+        # Every supported OS and every supported Node line, sampled as three
+        # representative cells instead of the full 3x3 Cartesian product.
+        include:
+          - os: ubuntu-latest
+            node: '20'
+          - os: windows-latest
+            node: '22'
+          - os: macos-latest
+            node: '24'
 
     steps:
       - uses: actions/checkout@v5

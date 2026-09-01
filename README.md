@@ -4,6 +4,7 @@
 [![Node](https://img.shields.io/badge/node-%E2%89%A520-3c873a?logo=node.js&logoColor=white)](package.json)
 [![TypeScript](https://img.shields.io/badge/typescript-strict-3178c6?logo=typescript&logoColor=white)](tsconfig.json)
 [![Runtime deps](https://img.shields.io/badge/runtime%20dependencies-0-brightgreen)](package.json)
+[![Titan Code](https://img.shields.io/badge/Titan%20Code-v3.4.2-6f42c1)](#the-product-this-comes-from)
 [![License](https://img.shields.io/badge/license-MIT-yellow)](LICENSE)
 
 Titan Code is a terminal coding agent I wrote in TypeScript: its own tool loop,
@@ -17,19 +18,72 @@ doing damage on my machine* — lifted out with its tests and its CI, so it can
 be read, run and disagreed with.
 
 ```bash
-npm install && npm test     # 255 tests, no API key, no network, no product
+npm ci && npm test          # 255 tests, no API key, no network, no product
 ```
 
-The badge above is this repository's own CI: nine jobs across Linux, macOS and
-Windows on Node 20, 22 and 24.
+The badge above is this repository's own CI: one representative job on each of
+Linux, macOS and Windows, covering Node 20, 22 and 24 without spending nine
+times the Actions allowance for the same platform signal.
+
+## Where the extraction sits now
+
+Titan Code has grown well beyond the snapshot this repository isolates. The
+current product is v3.4.2: 227 TypeScript modules, 4,000+ tests across 257
+files, 41 slash commands and 46 built-in tools. It now drives a browser and,
+on Windows, the desktop as well as a codebase; provider adapters share one
+streaming and tool-call contract; long autonomous runs retain a durable,
+auditable record of what was actually completed.
+
+This repository stays deliberately narrow. It remains the zero-runtime-
+dependency security argument that can be read and executed without an API key
+or access to the private product. The numbers below describe this repository;
+the product snapshot near the end is dated and labelled separately.
+
+## What changed in the full product
+
+The implementation stays private; these are the engineering outcomes, not a
+second source dump.
+
+**Silence became an explicit failure state.** A run now distinguishes model
+thinking, tool execution, waiting, rate limiting and a provider returning
+nothing. Empty completions stop with a useful diagnosis instead of leaving a
+spinner as the only evidence that anything happened. Provider errors retain
+the part that matters — malformed tool state, entitlement, quota or transport
+failure — without pretending that switching models fixes every one of them.
+
+**The terminal owns its geometry.** Model output, tool progress, navigation,
+the input editor, confirmation UI and the status line have separate rows and
+separate state. Repainting one cannot splice the chat input into a response.
+Transcript navigation, mouse selection, wheel scrolling, input history and
+vertical confirmation choices are treated as product behaviour and covered by
+regression tests, not terminal folklore.
+
+**A provider is an adapter, not another agent loop.** OpenAI Responses, OpenAI
+Chat Completions, Anthropic Messages and Gemini-style streams are normalised
+into one internal sequence of text, thinking, tool calls, usage and errors.
+Model catalogues, prompt-cache metadata, prices and quota state sit outside the
+loop, so adding a provider does not fork confirmation, persistence or retry
+semantics.
+
+**Browser work has to leave evidence.** The agent prefers a semantic browser
+transport with stable tab and control handles; pixel-level computer use is an
+explicit fallback. Form values retain their source, a successful action is
+recorded only after the page confirms it, and an interrupted long job can be
+resumed from a durable record. “Done” is therefore a checked state, not a
+sentence the model happened to write.
+
+**Autonomy has brakes.** Repeated failing calls, repeated writes to the same
+form field, stalled polling and runs that make no progress are detected as
+patterns. The system warns first where recovery is plausible, stops where it
+is not, and preserves what really happened for the next session.
 
 ---
 
 ## What is here
 
 Twelve modules, 2,548 lines, **zero runtime dependencies** — node's standard
-library and nothing else. 2,698 lines of tests across 13 files, and the three
-design documents the product ships with — 627 lines, copied unchanged.
+library and nothing else. 2,698 lines of tests across 13 files, and a 627-line
+snapshot of the three design documents that shipped with the extraction.
 
 | Module | Lines | What it does |
 |---|---:|---|
@@ -226,22 +280,25 @@ protection it does not have.
 
 ## The product this comes from
 
-Verified against the tree at the time of writing, not from memory:
+Verified against Titan Code v3.4.2 on 1 September 2026, not reconstructed from
+memory:
 
 | | |
 |---|---|
-| TypeScript | 22,729 lines across 159 modules |
-| Tests | 2,083, in 158 files — 95.6% of statements, 89.0% of branches |
-| CI | 9 matrix jobs on Linux, macOS and Windows × Node 20, 22, 24, plus coverage and a dependency audit |
-| Slash commands | 36 |
-| Agent tools | 13, six of them behind a confirmation |
-| Terminal layer | 14 modules, written directly against ANSI — no Ink, no React, no curses |
+| Version | 3.4.2 |
+| TypeScript | 47,141 lines across 227 production modules |
+| Tests | 4,000+ in 257 files, with enforced coverage thresholds |
+| CI | Linux, macOS and Windows on Node 20, 22 and 24, plus coverage, build smoke tests and a production dependency audit |
+| Slash commands | 41 |
+| Agent tools | 46, 20 of them behind a confirmation |
+| Browser and desktop | semantic Chrome extension transport plus OS-level computer use on Windows |
+| Terminal layer | 13 modules, written directly against ANSI — no Ink, no React, no curses |
 | Runtime dependencies | 7 |
 
-The renderer draws with an alternate screen buffer, scroll regions and cursor
-control, and repaints only what changed. Sessions live in SQLite and survive a
-restart; work can be delegated to subagents; MCP servers are reachable over
-stdio and Streamable HTTP.
+The renderer draws with an alternate screen buffer, cursor control and
+row-level repainting while keeping transcript history navigable. Sessions live
+in SQLite and survive a restart; work can be delegated to subagents; MCP
+servers are reachable over stdio and Streamable HTTP.
 
 The coverage gate is set just under what the suite achieves, so it catches a
 slide rather than blocking the next commit. Two things it deliberately does
