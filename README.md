@@ -40,6 +40,17 @@ dependency security argument that can be read and executed without an API key
 or access to the private product. The numbers below describe this repository;
 the product snapshot near the end is dated and labelled separately.
 
+## Computer vision and computer use
+
+Titan Code treats vision as a first-class part of the agent loop. It can see the
+active application, understand screenshots and image attachments, choose a tool
+action, operate a browser or Windows desktop and visually verify the result.
+
+Images travel as native multimodal content. Coordinate mapping connects resized
+model input to the real display, while a bounded screenshot window keeps visual
+context current and efficient. Browser work combines semantic Chrome controls
+with visual computer use for native dialogs and applications.
+
 ## What the full product delivers
 
 The implementation stays private; these are the product capabilities and the
@@ -62,19 +73,6 @@ into one internal sequence of text, thinking, tool calls, usage and errors.
 Model catalogues, prompt-cache metadata, prices and quota state sit outside the
 loop, so adding a provider does not fork confirmation, persistence or retry
 semantics.
-
-**Computer vision is part of the agent loop.** Screenshots and image attachments
-travel as native multimodal content rather than base64 text. The model can see
-the active application, choose a tool action, map coordinates from a resized
-image back to the real display and validate the next frame. A bounded
-screenshot window keeps visual context useful without allowing old images to
-consume the session budget.
-
-**Browser and desktop work leaves evidence.** The agent prefers a semantic
-Chrome transport with stable tab and control handles, then uses visual
-computer control for native dialogs and applications. Form values retain their
-source, successful actions are recorded after page confirmation, and an
-interrupted job can resume from a durable record.
 
 **Autonomy remains controlled.** Repeat guards, scoped confirmations, durable
 journals and resumable sessions let the agent work for a long time while
