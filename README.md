@@ -40,16 +40,21 @@ dependency security argument that can be read and executed without an API key
 or access to the private product. The numbers below describe this repository;
 the product snapshot near the end is dated and labelled separately.
 
-## Computer vision and computer use
+## Semantic page understanding and computer vision
 
-Titan Code treats vision as a first-class part of the agent loop. It can see the
-active application, understand screenshots and image attachments, choose a tool
-action, operate a browser or Windows desktop and visually verify the result.
+Titan Code has two complementary ways to understand an interface. Inside a web
+page, `page_read` uses the Chrome extension and DevTools Protocol to turn the
+live DOM into a compact, action-oriented semantic snapshot: page text, the main
+heading, the active dialog, reachable frames and usable controls, each with a
+role, accessible name, state, surrounding context and generation-safe `[ref]`
+handle. It walks open shadow roots, merges nested frames and can read one page
+branch in full. The model acts on those handles without needing the tab visible.
 
-Images travel as native multimodal content. Coordinate mapping connects resized
-model input to the real display, while a bounded screenshot window keeps visual
-context current and efficient. Browser work combines semantic Chrome controls
-with visual computer use for native dialogs and applications.
+For visual state, native applications and browser surfaces outside the page,
+screenshots and image attachments travel as native multimodal content. The
+model can see the active application, choose an action and visually verify the
+next frame; coordinate mapping and a bounded screenshot window keep that loop
+accurate and efficient.
 
 ## What the full product delivers
 
