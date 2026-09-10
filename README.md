@@ -18,7 +18,7 @@ includes the extracted security core with its tests and CI. It can be read and
 run without an API key or access to the private product.
 
 ```bash
-npm ci && npm test          # 327 tests, no API key, no network, no product
+npm ci && npm test          # 367 tests, no API key, no network, no product
 ```
 
 The badge above is this repository's own CI: one representative job on each of
@@ -28,7 +28,7 @@ times the Actions allowance for the same platform signal.
 ## Where the extraction sits now
 
 Titan Code has grown well beyond the snapshot this repository isolates. The
-current product is v3.4.2: 232 TypeScript modules, 4,600+ tests across 263
+current product is v3.4.2: 234 TypeScript modules, 4,600+ tests across 265
 files, 41 slash commands and 46 built-in tools. It drives a browser and, on
 Windows, the desktop as well as a codebase. Native multimodal messages let it
 reason over image attachments and live screenshots, while provider adapters
@@ -147,11 +147,41 @@ discarded by navigating back to the vacancy the other rule demanded be read,
 and the run's only way to record anything at all was to write "failed" on an
 application the site was showing as sent.
 
+## Signing in to a server that will not take a pasted token
+
+A hosted MCP server can ask for more than a token copied from a settings page.
+Upwork's does: OAuth 2.1, dynamic client registration, PKCE, a redirect that
+has to land somewhere. `mcpOAuth.ts` and `mcpLogin.ts` are that flow, and they
+depend on nothing but node.
+
+Nothing in it is guessed. A 401 carries a header naming where the server's
+rules live (RFC 9728); that document names an authorization server; that
+server's own metadata names the endpoints. Each hop is asked for, because the
+shape of these URLs differs between providers and reading one from another is
+how a working server comes to look like a broken one. That is not a
+hypothetical: this flow was nearly not built at all, on the strength of a URL
+that looked like it could not support registration. Sending the request
+returned `201 Created` with a client id.
+
+The redirect lands on a listener bound to loopback, open for as long as the
+approval takes and no longer. It accepts exactly one redirect — the one
+carrying this attempt's own state — and answers anything else with a 404,
+because a port on loopback is reachable by everything else on the machine. The
+authorization code is bound to a PKCE verifier that never leaves the process
+that generated it.
+
+The first thing `/mcp login` tries is not a browser. Upwork's tokens last a
+day, and a refresh token is worth trying before an interruption: an unattended
+run that stops each morning to ask for a sign-in has stopped being unattended.
+A refresh the server no longer honours is not an error either — it means
+signing in properly, which is what happens next.
+
 ## What is here
 
-Nineteen modules, 3,959 lines, **zero runtime dependencies** — node's standard
-library and nothing else. 3,708 lines of tests across 17 files, and a 627-line
-snapshot of the three design documents that shipped with the extraction.
+Twenty-one modules, 4,610 lines, **zero runtime dependencies** — node's
+standard library and nothing else. 4,376 lines of tests across 19 files, and a
+678-line snapshot of the three design documents that shipped with the
+extraction.
 
 | Module | Lines | What it does |
 |---|---:|---|
@@ -162,6 +192,8 @@ snapshot of the three design documents that shipped with the extraction.
 | [`accessibilityEnrichment.ts`](src/accessibilityEnrichment.ts) | 277 | Asks Chrome about the controls the DOM failed to name, and only those |
 | [`pageSettled.ts`](src/pageSettled.ts) | 126 | Waits for the page to stop changing instead of sleeping a guessed interval |
 | [`pageTypes.ts`](src/pageTypes.ts) | 57 | The browser-layer shapes the three modules above are written against |
+| [`mcpOAuth.ts`](src/mcpOAuth.ts) | 342 | Discovery, dynamic registration, PKCE and token exchange — every hop asked for rather than assumed |
+| [`mcpLogin.ts`](src/mcpLogin.ts) | 328 | The half that needs a browser: one redirect, on loopback, carrying this attempt's own state — and knowing when not to open one |
 | [`shellLexer.ts`](src/shellLexer.ts) | 244 | Lexes a shell command: quoting, escapes, substitutions, redirections, descriptor duplication, separators |
 | [`shellPolicy.ts`](src/shellPolicy.ts) | 546 | The policy over that lexer — wrapper chains, inline interpreters, argument writers |
 | [`workspaceGuard.ts`](src/workspaceGuard.ts) | 330 | Asks git what a command would destroy, and refuses only when the answer is work that exists nowhere else |

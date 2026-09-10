@@ -142,6 +142,30 @@ Tools, resources and prompts are all exposed. Names are prefixed with the
 server they came from, so `github:search_issues` and `local:search_issues` do
 not collide.
 
+### Signing in
+
+A hosted server may want more than a token pasted from a settings page. The
+401 it answers with carries a `WWW-Authenticate` header naming where its rules
+live (RFC 9728); that document names an authorization server; that server's
+own metadata names the endpoints. Each hop is asked for rather than assumed —
+the shape of these URLs varies between providers, and guessing one from
+another is how a working server reads as a broken one. ADR-14 records what
+that cost when it was skipped.
+
+Registration is dynamic (RFC 7591), so nothing has to be created by hand
+before the first sign-in. The authorization code is protected with PKCE and
+the redirect lands on a listener bound to loopback, open for as long as the
+approval takes and accepting exactly one redirect — the one carrying this
+attempt's own state. Anything else that reaches the port gets a 404.
+
+`/mcp login <name>` tries a refresh first and only then a browser. Upwork's
+tokens last a day: an unattended run that stopped each morning to ask for a
+sign-in would have stopped being unattended.
+
+The access token is stored where every other bearer token is looked for, so
+the transport needs to know none of this. The client id and refresh token are
+this flow's own business and live in the secret store.
+
 ## Subagents, skills, hooks
 
 **Subagents** are Markdown files with frontmatter — a name, a description, a

@@ -170,9 +170,10 @@ local subprocess, while most of the ecosystem is now hosted. Both response
 shapes are handled — the specification lets a server answer with JSON or with
 an event stream, and a client that handles one hangs against the other.
 
-**Deliberately absent.** The interactive OAuth flow with dynamic client
-registration. Bearer tokens are supported and a 401 explains itself. Shipping
-an untested authorisation flow would be worse than shipping none.
+**Deliberately absent, until it was not.** The interactive OAuth flow with
+dynamic client registration was left out on the grounds that shipping an
+untested authorisation flow is worse than shipping none. It is in the tree now,
+tested, and ADR-14 records what building it taught.
 
 ---
 
@@ -248,3 +249,29 @@ project except the interface is English.
 `git show 790a63e:docs/encyclopedic-audit/README.md` and in the five reports
 beside it. What it produced — the path repair, the permission work, the SSRF
 checks, the end-to-end tests — is in the code, and the ADRs say why.
+
+---
+
+## ADR-14 — A protocol endpoint is discovered, never inferred
+
+**Decision.** Every hop of the OAuth discovery chain is fetched. The 401's
+`WWW-Authenticate` header names where the rules live; that document names an
+authorization server; that server's metadata names the endpoints, registration
+included. None of those is derived from the shape of another, and none is
+skipped because the answer seems predictable.
+
+**Why.** This flow was nearly abandoned before a line of it was written. The
+registration endpoint was judged absent because its URL did not look like one
+that would offer registration — a conclusion drawn from a string, about a
+server that had not been asked. The POST returned `201 Created` with a client
+id. A URL is not evidence about what is behind it, and the cost of finding out
+was one request.
+
+**Consequence.** A sign-in spends three requests before it opens a browser,
+once. In exchange, a provider that arranges its metadata differently from the
+one this was written against still works, and a capability that exists is not
+recorded as missing.
+
+**Also decided here.** The refresh is tried before the browser. Upwork's
+tokens last a day; an unattended run that stops each morning to ask for a
+sign-in has stopped being unattended.
