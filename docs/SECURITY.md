@@ -172,7 +172,8 @@ and would not catch a novel one. The sandbox is what makes that acceptable —
 on the platforms that have one.
 
 **Secrets are filtered, not isolated.** `buildShellEnv` passes an allowlist of
-environment variables, so `OPENROUTER_API_KEY` does not reach a shell command.
+environment variables, so `OPENROUTER_API_KEY`, `OPENCODE_GO_API_KEY`, `ALIBABA_CLOUD_API_KEY`, `GMI_CLOUD_API_KEY`, and `GEMINI_API_KEY` do not reach a
+shell command.
 A command that reads `~/.config` for itself is a different matter, and on
 Linux and macOS the sandbox is what stops it writing there — not reading.
 

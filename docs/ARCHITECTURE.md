@@ -17,6 +17,8 @@ src/
   e2e/               packaging and runtime API smoke tests
   mcp.ts             MCP client
   mcpTransport.ts    stdio and Streamable HTTP
+  mcpOAuth.ts        discovery, registration, PKCE, token exchange
+  mcpLogin.ts        the browser half of signing in, and when not to
 ```
 
 
@@ -26,6 +28,21 @@ src/
 on what comes back. Each turn the model either answers or asks for tools; tool
 results are appended and the loop continues, up to a turn limit that can be
 extended at most three times.
+
+Provider routing happens before the shared streaming transport. Plain model ids
+use OpenRouter. `opencode-go/<model>` uses an OpenCode Go subscription and strips
+the local prefix before sending. Go is a mixed-protocol gateway: GPT-5.6 Luna
+uses OpenAI Responses; GLM, Kimi, DeepSeek, MiMo, Grok and Hy3 use OpenAI Chat
+Completions; Qwen and MiniMax use Anthropic Messages. All three adapters emit the same internal text, thinking,
+tool-call, usage and error events, so the agent loop retains one set of retry,
+timeout and persistence behaviour.
+
+`deepseek-direct/<model>` goes to DeepSeek's own endpoint rather than through
+either gateway. The prefix exists because OpenRouter already publishes models
+under `deepseek/`, and one of those two would otherwise have silently taken the
+other's traffic. Its pricing carries a peak surcharge — the same model costs
+twice as much inside two windows on weekdays — so the cost shown for a run is
+computed against the hour the tokens were actually spent, not a flat rate.
 
 Three details are not obvious from that description.
 
@@ -51,7 +68,7 @@ issues the call, rather than letting the turn end with a promise and no work.
 `src/screen/` is 13 modules and no dependencies.
 
 ```
-renderer.ts        ANSI primitives: alternate buffer, scroll regions, cursor
+renderer.ts        ANSI primitives: alternate buffer, cursor, row repainting
 layout.ts          how the rows divide between the zones
 state.ts           the single state object a repaint reads
 keyboard.ts        key decoding, including escape sequences
@@ -61,8 +78,9 @@ zones/             statusBar, inputLine, messageArea, confirmBar,
 ```
 
 A repaint writes only rows that changed. The alternate screen buffer keeps the
-session out of the user's scrollback, and the scroll region confines message
-output to its own area so the input line and status bar do not move.
+session out of the user's shell scrollback; the layout reserves independent
+rows for messages, navigation, input and status so a redraw cannot splice the
+input line into model output.
 
 Writing this by hand rather than taking Ink was a deliberate trade, and the
 reasoning is in [DECISIONS.md](DECISIONS.md#adr-2--a-hand-written-renderer-instead-of-ink).
@@ -196,3 +214,5 @@ assumption one at a time:
 
 CI runs the whole gate on Linux, Windows and macOS across three Node versions,
 so the next assumption is caught by a machine rather than by a person.
+
+GMI Cloud uses the OpenAI-compatible endpoint and dynamically keeps only zero-priced catalogue rows under `gmi-cloud/<model>`; the live entitlement is rechecked on `/providers refresh`.

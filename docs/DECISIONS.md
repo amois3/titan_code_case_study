@@ -36,8 +36,8 @@ React, no curses.
 **Why.** A React reconciler for a terminal buys component structure and pays
 for it with a full-tree diff per frame and a dependency that owns the paint
 loop. What this interface needs is narrower: repaint the rows that changed,
-keep a scroll region so the input line stays still, put the session in the
-alternate buffer so it does not pollute scrollback. That was about 800 lines
+reserve the input and status rows explicitly, and put the session in the
+alternate buffer so it does not pollute shell scrollback. That was about 800 lines
 written once against a stable, forty-year-old interface; it is 1,755 across 14
 modules now, and still owns its own paint loop.
 
