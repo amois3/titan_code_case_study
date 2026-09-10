@@ -18,7 +18,7 @@ includes the extracted security core with its tests and CI. It can be read and
 run without an API key or access to the private product.
 
 ```bash
-npm ci && npm test          # 255 tests, no API key, no network, no product
+npm ci && npm test          # 306 tests, no API key, no network, no product
 ```
 
 The badge above is this repository's own CI: one representative job on each of
@@ -28,7 +28,7 @@ times the Actions allowance for the same platform signal.
 ## Where the extraction sits now
 
 Titan Code has grown well beyond the snapshot this repository isolates. The
-current product is v3.4.2: 227 TypeScript modules, 4,000+ tests across 257
+current product is v3.4.2: 232 TypeScript modules, 4,500+ tests across 262
 files, 41 slash commands and 46 built-in tools. It drives a browser and, on
 Windows, the desktop as well as a codebase. Native multimodal messages let it
 reason over image attachments and live screenshots, while provider adapters
@@ -49,6 +49,22 @@ heading, the active dialog, reachable frames and usable controls, each with a
 role, accessible name, state, surrounding context and generation-safe `[ref]`
 handle. It walks open shadow roots, merges nested frames and can read one page
 branch in full. The model acts on those handles without needing the tab visible.
+
+Two problems sit under that snapshot, and both are in this repository now.
+
+A control the DOM cannot name is a control the model cannot choose:
+application forms are largely unlabelled `div`s, and a snapshot of one reads as
+a list of identical `generic ""` rows. `accessibilityEnrichment.ts` asks
+Chrome's accessibility view for a computed name — for those controls only, at
+most a handful per snapshot, never for a password field, and never for a handle
+it did not issue. A page whose markup is honest asks nothing and pays nothing.
+
+Knowing when a page has finished is the other. Sleeping a fixed interval after
+a click is wrong in both directions: too long for a page that settled in 60 ms,
+too short for a dialog that animates out over most of a second.
+`pageSettled.ts` installs a MutationObserver for the length of one wait and
+returns on a short quiet window, bounded so a page that never goes quiet costs
+no more than the guess it replaces.
 
 For visual state, native applications and browser surfaces outside the page,
 screenshots and image attachments travel as native multimodal content. The
@@ -85,14 +101,38 @@ keeping actions reviewable and preventing unproductive loops.
 
 ---
 
+## An application recorded is an application that happened
+
+An agent that applies to jobs unattended is trusted with a claim nobody watches
+it make. `evidence.ts` is the part that refuses to take the run's word for it.
+
+A record of a sent application is accepted only when a tool watched that tab
+change into the site's own confirmation, for that vacancy, and when a full read
+of that vacancy — not a search-results card — is what the subject was taken
+from. The difference between "the page changed into this" and "the page was
+showing this" is carried into the record, because a job board shows "applied"
+on a vacancy someone applied to months ago.
+
+Both halves have been wrong in production and are pinned here. Seven
+applications were once recorded in an hour and one was found in the account,
+every record written in good faith by a run whose own tools had told it the
+page said "sent". Later the two rules deadlocked: proof of a submission was
+discarded by navigating back to the vacancy the other rule demanded be read,
+and the run's only way to record anything at all was to write "failed" on an
+application the site was showing as sent.
+
 ## What is here
 
-Twelve modules, 2,548 lines, **zero runtime dependencies** — node's standard
-library and nothing else. 2,698 lines of tests across 13 files, and a 627-line
+Sixteen modules, 3,429 lines, **zero runtime dependencies** — node's standard
+library and nothing else. 3,370 lines of tests across 16 files, and a 627-line
 snapshot of the three design documents that shipped with the extraction.
 
 | Module | Lines | What it does |
 |---|---:|---|
+| [`evidence.ts`](src/evidence.ts) | 409 | What the page was watched doing, so a record of an application is a record of something that happened |
+| [`accessibilityEnrichment.ts`](src/accessibilityEnrichment.ts) | 277 | Asks Chrome about the controls the DOM failed to name, and only those |
+| [`pageSettled.ts`](src/pageSettled.ts) | 126 | Waits for the page to stop changing instead of sleeping a guessed interval |
+| [`pageTypes.ts`](src/pageTypes.ts) | 57 | The browser-layer shapes the three modules above are written against |
 | [`shellLexer.ts`](src/shellLexer.ts) | 244 | Lexes a shell command: quoting, escapes, substitutions, redirections, descriptor duplication, separators |
 | [`shellPolicy.ts`](src/shellPolicy.ts) | 546 | The policy over that lexer — wrapper chains, inline interpreters, argument writers |
 | [`workspaceGuard.ts`](src/workspaceGuard.ts) | 330 | Asks git what a command would destroy, and refuses only when the answer is work that exists nowhere else |
@@ -228,14 +268,14 @@ protection it does not have.
 
 ## The product this comes from
 
-Verified against Titan Code v3.4.2 on 1 September 2026, not reconstructed from
-memory:
+Verified against Titan Code v3.4.2 on 10 September 2026, not reconstructed
+from memory:
 
 | | |
 |---|---|
 | Version | 3.4.2 |
-| TypeScript | 47,141 lines across 227 production modules |
-| Tests | 4,000+ in 257 files, with enforced coverage thresholds |
+| TypeScript | 48,462 lines across 232 production modules |
+| Tests | 4,500+ in 262 files, with enforced coverage thresholds |
 | CI | Linux, macOS and Windows on Node 20, 22 and 24, plus coverage, build smoke tests and a production dependency audit |
 | Slash commands | 41 |
 | Agent tools | 46, 20 of them behind a confirmation |
