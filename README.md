@@ -18,7 +18,7 @@ includes the extracted security core with its tests and CI. It can be read and
 run without an API key or access to the private product.
 
 ```bash
-npm ci && npm test          # 306 tests, no API key, no network, no product
+npm ci && npm test          # 327 tests, no API key, no network, no product
 ```
 
 The badge above is this repository's own CI: one representative job on each of
@@ -28,7 +28,7 @@ times the Actions allowance for the same platform signal.
 ## Where the extraction sits now
 
 Titan Code has grown well beyond the snapshot this repository isolates. The
-current product is v3.4.2: 232 TypeScript modules, 4,500+ tests across 262
+current product is v3.4.2: 232 TypeScript modules, 4,600+ tests across 263
 files, 41 slash commands and 46 built-in tools. It drives a browser and, on
 Windows, the desktop as well as a codebase. Native multimodal messages let it
 reason over image attachments and live screenshots, while provider adapters
@@ -101,6 +101,32 @@ keeping actions reviewable and preventing unproductive loops.
 
 ---
 
+## What a long conversation costs, and why the cheapest fix was free
+
+Every turn re-sends the whole conversation. Providers price a cached prompt at a
+fiftieth of a fresh one and key the cache on the prefix: byte-identical from the
+start, or nothing.
+
+An unattended run of 308 turns spent 36.1 million input tokens. Under the
+working ceiling the cache carried 97.7% of each prompt and 1,852 tokens were
+fresh — the new tool result and nothing else. From the turn the ceiling was
+crossed, 33,398 were fresh, and stayed that way for two hundred and fifty turns.
+Ninety-four per cent of that run's input bill was the fifth of the tokens the
+cache had lost.
+
+The cause was the shortening meant to keep the conversation small. The window of
+tool results kept whole slid by one every turn, so one more message was
+rewritten every turn and the prefix never held still. `contextBudget.ts` now
+shortens up to a frontier that advances only under pressure and never retreats:
+between advances the prefix only grows at the end. It keeps *more* history whole
+than the sliding window did — a payload ages out at the next advance rather than
+the next turn — so nothing was traded away for the saving. What was removed was
+repeated work, not context.
+
+This is also why the token estimator leans high. Non-Latin text splits into far
+smaller pieces than English, and an underestimate compacts too late; too late is
+a request the provider refuses outright, mid-task.
+
 ## An application recorded is an application that happened
 
 An agent that applies to jobs unattended is trusted with a claim nobody watches
@@ -123,12 +149,15 @@ application the site was showing as sent.
 
 ## What is here
 
-Sixteen modules, 3,429 lines, **zero runtime dependencies** — node's standard
-library and nothing else. 3,370 lines of tests across 16 files, and a 627-line
+Nineteen modules, 3,959 lines, **zero runtime dependencies** — node's standard
+library and nothing else. 3,708 lines of tests across 17 files, and a 627-line
 snapshot of the three design documents that shipped with the extraction.
 
 | Module | Lines | What it does |
 |---|---:|---|
+| [`contextBudget.ts`](src/contextBudget.ts) | 320 | What a long conversation is allowed to cost: shortening that a provider's cache can follow, and pruning before the request is refused |
+| [`messageContent.ts`](src/messageContent.ts) | 157 | The shape a message takes when it carries text, images and file attachments at once |
+| [`tokens.ts`](src/tokens.ts) | 53 | What a piece of text will cost, biased upward on purpose |
 | [`evidence.ts`](src/evidence.ts) | 409 | What the page was watched doing, so a record of an application is a record of something that happened |
 | [`accessibilityEnrichment.ts`](src/accessibilityEnrichment.ts) | 277 | Asks Chrome about the controls the DOM failed to name, and only those |
 | [`pageSettled.ts`](src/pageSettled.ts) | 126 | Waits for the page to stop changing instead of sleeping a guessed interval |
@@ -274,8 +303,8 @@ from memory:
 | | |
 |---|---|
 | Version | 3.4.2 |
-| TypeScript | 48,462 lines across 232 production modules |
-| Tests | 4,500+ in 262 files, with enforced coverage thresholds |
+| TypeScript | 48,680 lines across 232 production modules |
+| Tests | 4,600+ in 263 files, with enforced coverage thresholds |
 | CI | Linux, macOS and Windows on Node 20, 22 and 24, plus coverage, build smoke tests and a production dependency audit |
 | Slash commands | 41 |
 | Agent tools | 46, 20 of them behind a confirmation |
