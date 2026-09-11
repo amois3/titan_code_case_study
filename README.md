@@ -180,7 +180,7 @@ signing in properly, which is what happens next.
 
 Twenty-one modules, 4,610 lines, **zero runtime dependencies** — node's
 standard library and nothing else. 4,376 lines of tests across 19 files, and a
-699-line snapshot of the three design documents that shipped with the
+726-line snapshot of the three design documents that shipped with the
 extraction.
 
 | Module | Lines | What it does |

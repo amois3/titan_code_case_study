@@ -17,6 +17,7 @@ src/
   e2e/               packaging and runtime API smoke tests
   mcp.ts             MCP client
   mcpTransport.ts    stdio and Streamable HTTP
+  sessionProfile.ts  what kind of work a session is, and what it may use
   mcpOAuth.ts        discovery, registration, PKCE, token exchange
   mcpLogin.ts        the browser half of signing in, and when not to
 ```
@@ -183,6 +184,32 @@ sign-in would have stopped being unattended.
 The access token is stored where every other bearer token is looked for, so
 the transport needs to know none of this. The client id and refresh token are
 this flow's own business and live in the secret store.
+
+## Work profiles
+
+One tool is used for everything here: building things, and looking for work on
+two platforms. The cost of that was measurable. The Upwork MCP server publishes
+29 tools whose schemas come to 25,275 tokens — nearly twice the entire built-in
+surface of 47 — and every request carried them, including the ones about a
+React component.
+
+The bill is the smaller half of the argument, because the tool list sits in the
+cached prefix and a cached token costs a fiftieth. The larger half is what the
+model is looking at: `cover_letter` and `find_jobs` in front of a model asked
+to fix a build is an invitation to a wrong turn, and `task_done` is written in
+the language of job applications.
+
+So `sessionProfile.ts` decides what kind of work a session is, from what the
+operator actually said. Naming a platform is not enough — "let us fix the
+Upwork module" is development — the intention to look for work has to arrive
+with it. The profile is then held for the session rather than re-decided each
+turn, because a tool list that changes between turns throws away the cache it
+sits in, and no saving is worth that. `/profile` shows what was inferred and
+overrides it.
+
+The filter is applied where the request's tool list is assembled, which is one
+place for every provider, so it reaches the OpenRouter, Anthropic Messages and
+OpenAI Responses adapters alike rather than being repeated in three of them.
 
 ## Subagents, skills, hooks
 
