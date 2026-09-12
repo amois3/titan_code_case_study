@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { createServer } from 'node:http';
-import { browserCommandFor, callbackUrl, loginToMcpServer, openBrowser, signInSecretKey, signInToServer } from './mcpLogin';
+import { browserCommandFor, callbackUrl, loginToMcpServer, openBrowser, renewAccessToken, signInSecretKey, signInToServer } from './mcpLogin';
 
 /**
  * The half that needs a browser, driven without one.
@@ -431,5 +431,79 @@ describe('opening a browser for the operator', () => {
     // A headless box, an SSH session, a locked-down desktop: the URL was
     // already printed, so there is nothing here to recover from.
     expect(() => openBrowser('https://x.test', throwing, 'linux')).not.toThrow();
+  });
+});
+
+/**
+ * Renewing without a person.
+ *
+ * The moment this is wanted is the moment nobody is watching: the token lasts
+ * a day, and the morning after, the server answers 401 and every tool it
+ * publishes disappears. This is the half of signing in that needs no browser,
+ * and it must never open one.
+ */
+describe('getting a fresh token quietly', () => {
+  const metadata = {
+    issuer: 'https://mcp.example.test',
+    authorizationEndpoint: 'https://www.example.test/authorize',
+    tokenEndpoint: 'https://www.example.test/token',
+    supportsS256: true
+  };
+
+  function harness(over: Partial<Parameters<typeof renewAccessToken>[2]> = {}): {
+    deps: Parameters<typeof renewAccessToken>[2];
+    secrets: Record<string, string>;
+  } {
+    const secrets: Record<string, string> = {
+      [signInSecretKey('upwork', 'CLIENT')]: 'known',
+      [signInSecretKey('upwork', 'REFRESH')]: 'still-good'
+    };
+    return {
+      secrets,
+      deps: {
+        discover: async () => metadata,
+        refresh: async () => ({ accessToken: 'renewed', refreshToken: 'next-time' }),
+        readSecret: (key) => secrets[key],
+        writeSecret: (key, value) => { secrets[key] = value; },
+        ...over
+      }
+    };
+  }
+
+  it('hands back a fresh token', async () => {
+    const { deps, secrets } = harness();
+
+    await expect(renewAccessToken('upwork', 'https://mcp.example.test/mcp', deps)).resolves.toBe('renewed');
+    // The server may replace it; keeping the old one spends a credential it
+    // has already retired.
+    expect(secrets[signInSecretKey('upwork', 'REFRESH')]).toBe('next-time');
+  });
+
+  it('keeps the old refresh token when none comes back', async () => {
+    const { deps, secrets } = harness({ refresh: async () => ({ accessToken: 'renewed' }) });
+
+    await renewAccessToken('upwork', 'https://mcp.example.test/mcp', deps);
+
+    expect(secrets[signInSecretKey('upwork', 'REFRESH')]).toBe('still-good');
+  });
+
+  it('gives nothing when there is nothing to renew from', async () => {
+    const { deps } = harness({ readSecret: () => undefined });
+
+    await expect(renewAccessToken('upwork', 'https://mcp.example.test/mcp', deps)).resolves.toBeUndefined();
+  });
+
+  it('gives nothing when the server will not honour the refresh token', async () => {
+    const { deps } = harness({ refresh: async () => { throw new Error('invalid_grant'); } });
+
+    // Not an error to report: it means the operator has to sign in, and that
+    // is said to them rather than done behind their back.
+    await expect(renewAccessToken('upwork', 'https://mcp.example.test/mcp', deps)).resolves.toBeUndefined();
+  });
+
+  it('gives nothing when discovery itself fails', async () => {
+    const { deps } = harness({ discover: async () => { throw new Error('offline'); } });
+
+    await expect(renewAccessToken('upwork', 'https://mcp.example.test/mcp', deps)).resolves.toBeUndefined();
   });
 });

@@ -18,7 +18,7 @@ includes the extracted security core with its tests and CI. It can be read and
 run without an API key or access to the private product.
 
 ```bash
-npm ci && npm test          # 367 tests, no API key, no network, no product
+npm ci && npm test          # 381 tests, no API key, no network, no product
 ```
 
 The badge above is this repository's own CI: one representative job on each of
@@ -178,8 +178,8 @@ signing in properly, which is what happens next.
 
 ## What is here
 
-Twenty-one modules, 4,610 lines, **zero runtime dependencies** — node's
-standard library and nothing else. 4,376 lines of tests across 19 files, and a
+Twenty-one modules, 4,791 lines, **zero runtime dependencies** — node's
+standard library and nothing else. 4,549 lines of tests across 19 files, and a
 726-line snapshot of the three design documents that shipped with the
 extraction.
 

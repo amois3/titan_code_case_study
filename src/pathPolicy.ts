@@ -1,15 +1,22 @@
 import { existsSync, lstatSync, readlinkSync } from 'fs';
 import { homedir } from 'os';
 import { dirname, isAbsolute, join, parse, relative, resolve, sep } from 'path';
+import { AsyncLocalStorage } from 'async_hooks';
 
 let PROJECT_ROOT = resolve(process.cwd());
+const projectRootContext = new AsyncLocalStorage<string>();
 
 export function setProjectRoot(rootPath: string): void {
   PROJECT_ROOT = resolve(normalizeUserPath(rootPath));
 }
 
 export function getProjectRoot(): string {
-  return PROJECT_ROOT;
+  return projectRootContext.getStore() ?? PROJECT_ROOT;
+}
+
+/** Isolates concurrent headless/subagent tool runs without changing global cwd. */
+export function runWithProjectRoot<T>(rootPath: string, task: () => T): T {
+  return projectRootContext.run(resolve(normalizeUserPath(rootPath)), task);
 }
 
 /**
@@ -85,7 +92,7 @@ export function toDisplayHomePath(absolutePath: string, home = homedir()): strin
   return abs;
 }
 
-export function resolveSafePath(inputPath: string, basePath = PROJECT_ROOT): string {
+export function resolveSafePath(inputPath: string, basePath = getProjectRoot()): string {
   const expanded = normalizeUserPath(inputPath);
   const base = normalizeUserPath(basePath);
   return isAbsolute(expanded) ? resolve(expanded) : resolve(base, expanded);
@@ -150,7 +157,7 @@ function resolveRealPath(inputPath: string, budget = MAX_SYMLINK_HOPS): string {
  * the file it designates is not — and the agent reads repositories it did not
  * write, so such a link is not a hypothetical.
  */
-export function isPathInsideRoot(inputPath: string, rootPath = PROJECT_ROOT): boolean {
+export function isPathInsideRoot(inputPath: string, rootPath = getProjectRoot()): boolean {
   try {
     const root = resolve(normalizeUserPath(rootPath));
     const realRoot = resolveRealPath(root);
@@ -163,7 +170,7 @@ export function isPathInsideRoot(inputPath: string, rootPath = PROJECT_ROOT): bo
 }
 
 /** The location a path actually designates, for messages and audit records. */
-export function describeRealPath(inputPath: string, rootPath = PROJECT_ROOT): string {
+export function describeRealPath(inputPath: string, rootPath = getProjectRoot()): string {
   const root = resolve(normalizeUserPath(rootPath));
   return resolveRealPath(resolveSafePath(inputPath, root));
 }
@@ -175,7 +182,7 @@ export function describeRealPath(inputPath: string, rootPath = PROJECT_ROOT): st
  * slash command only the operator can type, so the instruction named an
  * action the reader cannot perform. What followed was a retry loop.
  */
-export function formatPathOutsideRootMessage(inputPath: string, rootPath = PROJECT_ROOT): string {
+export function formatPathOutsideRootMessage(inputPath: string, rootPath = getProjectRoot()): string {
   const requested = resolveSafePath(inputPath, rootPath);
   const actual = resolveRealPath(requested);
   const lines = [`Blocked: path is outside the workspace.`, `  requested: ${requested}`];

@@ -10,6 +10,7 @@ import {
   isPathInsideRoot,
   normalizeUserPath,
   resolveSafePath,
+  runWithProjectRoot,
   setProjectRoot,
   toDisplayHomePath
 } from './pathPolicy';
@@ -29,6 +30,33 @@ describe('pathPolicy', () => {
     expect(resolveSafePath('subdir')).toBe(join(secondRoot, 'subdir'));
     expect(isPathInsideRoot(join(firstRoot, 'subdir'))).toBe(false);
     expect(isPathInsideRoot(join(secondRoot, 'subdir'))).toBe(true);
+  });
+
+  it('isolates concurrent asynchronous tool roots', async () => {
+    const firstRoot = mkdtempSync(join(tmpdir(), 'titan-async-root-a-'));
+    const secondRoot = mkdtempSync(join(tmpdir(), 'titan-async-root-b-'));
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => { release = resolve; });
+
+    try {
+      const first = runWithProjectRoot(firstRoot, async () => {
+        await gate;
+        return resolveSafePath('same.txt');
+      });
+      const second = runWithProjectRoot(secondRoot, async () => {
+        release();
+        await Promise.resolve();
+        return resolveSafePath('same.txt');
+      });
+
+      expect(await Promise.all([first, second])).toEqual([
+        join(firstRoot, 'same.txt'),
+        join(secondRoot, 'same.txt')
+      ]);
+    } finally {
+      rmSync(firstRoot, { recursive: true, force: true });
+      rmSync(secondRoot, { recursive: true, force: true });
+    }
   });
 });
 

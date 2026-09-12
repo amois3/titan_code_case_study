@@ -187,3 +187,74 @@ describe('resolving before allowing', () => {
     expect(Date.now() - started).toBeLessThan(5000);
   }, 10_000);
 });
+
+/**
+ * The shapes an address takes when it is trying to look public.
+ *
+ * Most of them are settled by the URL parser before the policy sees them —
+ * WHATWG parsing turns http://2130706433/ into 127.0.0.1 — but two were not,
+ * and both walked straight through: a name with a trailing dot, and a metadata
+ * service asked for by name rather than by address.
+ */
+describe('addresses that try to look public', () => {
+  const blocked = (url: string): boolean => !checkUrlPolicySync(url).allowed;
+
+  it('sees through every numeric form of loopback', () => {
+    expect(blocked('http://127.0.0.1/')).toBe(true);
+    expect(blocked('http://2130706433/')).toBe(true);
+    expect(blocked('http://0177.0.0.1/')).toBe(true);
+    expect(blocked('http://0x7f000001/')).toBe(true);
+    expect(blocked('http://127.1/')).toBe(true);
+  });
+
+  it('sees through every IPv6 form of it', () => {
+    expect(blocked('http://[::1]/')).toBe(true);
+    expect(blocked('http://[0:0:0:0:0:0:0:1]/')).toBe(true);
+    expect(blocked('http://[::ffff:127.0.0.1]/')).toBe(true);
+    expect(blocked('http://[::ffff:7f00:1]/')).toBe(true);
+  });
+
+  /**
+   * A trailing dot makes a name fully qualified and changes nothing about
+   * where it points. Left on, it walked past every comparison.
+   */
+  it('is not fooled by a trailing dot', () => {
+    expect(blocked('http://localhost./')).toBe(true);
+    expect(blocked('http://localhost../')).toBe(true);
+  });
+
+  /**
+   * A metadata service answers on a link-local address, which is already
+   * refused — but it also answers to a name, and a name is not an address
+   * until DNS has been asked. The sync check runs before any lookup.
+   */
+  it('refuses a metadata service asked for by name', () => {
+    expect(blocked('http://metadata.google.internal/computeMetadata/v1/')).toBe(true);
+    expect(blocked('http://metadata/')).toBe(true);
+    expect(blocked('http://instance-data/')).toBe(true);
+    expect(blocked('http://metadata.goog/')).toBe(true);
+  });
+
+  /** Reserved private-use namespaces cannot name anything on the internet. */
+  it('refuses the reserved private namespaces', () => {
+    expect(blocked('http://anything.internal/')).toBe(true);
+    expect(blocked('http://printer.home.arpa/')).toBe(true);
+    expect(blocked('http://nas.lan/')).toBe(true);
+  });
+
+  it('refuses the cloud metadata address itself', () => {
+    expect(blocked('http://169.254.169.254/latest/meta-data/')).toBe(true);
+    // Alibaba Cloud's is inside the carrier-grade NAT range.
+    expect(blocked('http://100.100.100.200/latest/meta-data/')).toBe(true);
+  });
+
+  it('is not fooled by a public name in the userinfo', () => {
+    expect(blocked('http://example.com@127.0.0.1/')).toBe(true);
+  });
+
+  it('still lets an ordinary public address through', () => {
+    expect(blocked('https://www.linkedin.com/jobs/')).toBe(false);
+    expect(blocked('https://internal-affairs.example.com/')).toBe(false);
+    expect(blocked('https://localhosting.example.com/')).toBe(false);
+  });
+});

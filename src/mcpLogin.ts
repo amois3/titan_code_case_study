@@ -326,3 +326,43 @@ export async function signInToServer(name: string, url: string, deps: SignInDeps
     };
   }
 }
+
+/** What renewing a token without a browser needs, so it can be driven in a test. */
+export interface RenewDeps {
+  discover: (resourceUrl: string) => Promise<AuthServerMetadata>;
+  refresh: (input: {
+    metadata: AuthServerMetadata; clientId: string; refreshToken: string; resource?: string;
+  }) => Promise<Tokens>;
+  readSecret: (key: string) => string | undefined;
+  writeSecret: (key: string, value: string) => void;
+}
+
+/**
+ * A fresh access token, quietly, or nothing.
+ *
+ * This is the half of signing in that needs no person, split out because the
+ * moment it is wanted is the moment nobody is watching: the token lasts a day,
+ * and the morning after, the server answers 401 and every tool it publishes
+ * disappears. A run told to look for work on Upwork then has no Upwork tools
+ * and does the sensible thing with what is left — it opens a browser — which
+ * is how a working integration looks broken.
+ *
+ * No browser here, ever. A refresh token the server will not honour means the
+ * operator has to sign in, and that is said rather than done behind their back.
+ */
+export async function renewAccessToken(name: string, url: string, deps: RenewDeps): Promise<string | undefined> {
+  const clientId = deps.readSecret(signInSecretKey(name, 'CLIENT'));
+  const refreshToken = deps.readSecret(signInSecretKey(name, 'REFRESH'));
+  if (!clientId || !refreshToken) return undefined;
+
+  try {
+    const metadata = await deps.discover(url);
+    const renewed = await deps.refresh({ metadata, clientId, refreshToken, resource: url });
+    if (renewed.refreshToken) deps.writeSecret(signInSecretKey(name, 'REFRESH'), renewed.refreshToken);
+    return renewed.accessToken;
+  } catch {
+    // Dead, revoked, or the server is down. The caller reports what it can and
+    // the operator signs in again; guessing further would only delay that.
+    return undefined;
+  }
+}

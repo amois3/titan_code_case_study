@@ -193,6 +193,115 @@ export function noteReviewedPage(
   });
 }
 
+/**
+ * A vacancy read from the server that owns it, rather than from a page.
+ *
+ * The rule above asks for a tab because that was the only way to read a
+ * vacancy when it was written. It costs something now: a run that fetched the
+ * posting over MCP — from the same database that renders the page, without the
+ * rendering layer the rule was defending against — could not record its own
+ * decision, and re-opened every vacancy in Chrome purely to satisfy the
+ * recorder. Eleven round trips in one run on 2026-09-11, each one re-reading
+ * what it already had.
+ *
+ * The guard it is not weakening: a card in a list of ten is still not a read
+ * vacancy. Only a result about exactly one vacancy, carrying its full text,
+ * counts here — which is the same thing the tab rule was asking for.
+ */
+export interface ServedRecord {
+  itemUrl: string;
+  itemKey?: string;
+  identity: string;
+  text: string;
+  source: string;
+  at: number;
+}
+
+const served = new Map<string, ServedRecord>();
+
+function servedKey(url: string): string | undefined {
+  return workItemKey(url) ?? normaliseUrl(url);
+}
+
+export function noteServedRecord(url: string, identity: string, text: string, source: string): void {
+  const key = servedKey(url);
+  const normalised = normaliseUrl(url);
+  if (!key || !normalised || !identity.trim() || !text.trim()) return;
+  served.set(key, {
+    itemUrl: normalised,
+    ...(workItemKey(url) ? { itemKey: workItemKey(url) } : {}),
+    identity: identity.trim().slice(0, 2_000),
+    text: text.trim().slice(0, 80_000),
+    source,
+    at: Date.now()
+  });
+}
+
+/**
+ * The server said it accepted the proposal.
+ *
+ * Written the day after this was deliberately left out. The comment then said
+ * that nothing here had yet seen what a server says when it accepts a
+ * proposal, so nothing here would pretend to recognise it. On 2026-09-12 it
+ * said this:
+ *
+ *   {"data":{"createJobProposal":{"newProposalId":"...","status":"SUCCESS"}},
+ *    "status":"submitted"}
+ *
+ * Ten Connects were spent, the proposal exists on the account, and the run
+ * could not record it. It tried four times, went to the browser to satisfy a
+ * check written for the browser, found the page already saying "you have
+ * already submitted a proposal" — which is not a confirmation being watched —
+ * and finally wrote the application down as failed. The operator's own log
+ * said an application had failed that had in fact gone through.
+ */
+export function noteServedSubmission(jobReference: string, source: string, now = Date.now()): string | undefined {
+  const reference = jobReference.trim().toLowerCase();
+  if (!reference) return undefined;
+  for (const record of served.values()) {
+    if (!record.itemUrl.includes(reference)) continue;
+    submitted.set(servedKey(record.itemUrl) ?? record.itemUrl, { ...record, source, at: now });
+    return record.itemUrl;
+  }
+  return undefined;
+}
+
+const submitted = new Map<string, ServedRecord>();
+
+export function forgetServedSubmissions(): void {
+  submitted.clear();
+}
+
+/** Whether the server that owns this vacancy said it took the proposal. */
+export function servedSubmission(claimedUrl: string, now = Date.now()): ReviewVerdict {
+  const key = servedKey(claimedUrl);
+  const note = key ? submitted.get(key) : undefined;
+  if (!note || now - note.at > STILL_ABOUT_THIS_ITEM_MS) {
+    return { ok: false, reason: 'no server has confirmed a submission for that vacancy in this run' };
+  }
+  return { ok: true, evidence: { ...note, ageMs: now - note.at, tabId: note.source } };
+}
+
+export function forgetServedRecords(): void {
+  served.clear();
+}
+
+/** What the server said about this vacancy, if it said it recently enough. */
+export function servedReview(claimedUrl: string, subject: string, now = Date.now()): ReviewVerdict {
+  const key = servedKey(claimedUrl);
+  const note = key ? served.get(key) : undefined;
+  if (!note || now - note.at > STILL_ABOUT_THIS_ITEM_MS) {
+    return { ok: false, reason: 'no recent full read of that vacancy exists, in a tab or from a server' };
+  }
+  if (!subjectMatchesPage(subject, note.identity)) {
+    return {
+      ok: false,
+      reason: `the subject "${subject}" does not match the title on the vacancy record ${note.source} returned`
+    };
+  }
+  return { ok: true, evidence: { ...note, ageMs: now - note.at, tabId: note.source } };
+}
+
 export function noteSeen(
   tabId: string,
   what: string,

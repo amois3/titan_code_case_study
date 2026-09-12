@@ -95,10 +95,35 @@ function isPrivateV6(hostname: string): boolean {
   return false;
 }
 
+/**
+ * Names that are never a public host.
+ *
+ * A metadata service answers on a link-local address, and that address is
+ * already refused — but it also answers to a name, and a name is not an
+ * address until DNS has been asked. The sync check runs before any lookup,
+ * so without these it passed metadata.google.internal straight through.
+ *
+ * `.internal` is ICANN's reserved private-use top level domain and `.home.arpa`
+ * is RFC 8375: neither can name anything on the public internet.
+ */
+const NEVER_PUBLIC_SUFFIXES = [
+  '.localhost',
+  '.local',
+  '.internal',
+  '.home.arpa',
+  '.lan'
+];
+
+const NEVER_PUBLIC_NAMES = new Set(['localhost', 'metadata', 'instance-data', 'metadata.goog']);
+
 export function isPrivateOrLocalHostname(hostname: string): boolean {
-  const host = hostname.replace(/^\[|\]$/g, '').toLowerCase();
+  // A trailing dot makes a name fully qualified and changes nothing about
+  // where it points: "localhost." is "localhost". Left on, it walked past
+  // every comparison below — the oldest bypass in the book.
+  const host = hostname.replace(/^\[|\]$/g, '').toLowerCase().replace(/\.+$/, '');
   if (!host) return true;
-  if (host === 'localhost' || host.endsWith('.localhost') || host.endsWith('.local')) return true;
+  if (NEVER_PUBLIC_NAMES.has(host)) return true;
+  if (NEVER_PUBLIC_SUFFIXES.some((suffix) => host.endsWith(suffix))) return true;
 
   const version = isIP(host);
   if (version === 4) {
