@@ -28,8 +28,8 @@ times the Actions allowance for the same platform signal.
 ## Where the extraction sits now
 
 Titan Code has grown well beyond the snapshot this repository isolates. The
-current product is v3.4.2: 234 TypeScript modules, 4,600+ tests across 265
-files, 41 slash commands and 46 built-in tools. It drives a browser and, on
+current product is v3.4.2: 237 TypeScript modules, 4,889 tests across 268
+files, 41 slash commands and 47 built-in tools. It drives a browser and, on
 Windows, the desktop as well as a codebase. Native multimodal messages let it
 reason over image attachments and live screenshots, while provider adapters
 share one streaming and tool-call contract and autonomous runs retain a
@@ -315,7 +315,7 @@ filesystem shapes on every platform.
 
 ```bash
 npm install
-npm test          # 255 tests in 13 files
+npm test          # 381 tests in 19 files
 npm run verify    # typecheck, lint, test
 ```
 
@@ -329,17 +329,17 @@ protection it does not have.
 
 ## The product this comes from
 
-Verified against Titan Code v3.4.2 on 10 September 2026, not reconstructed
-from memory:
+Verified against Titan Code v3.4.2 on 16 September 2026 — counted from the
+tree and read off the CI run of 15 September, not reconstructed from memory:
 
 | | |
 |---|---|
 | Version | 3.4.2 |
-| TypeScript | 48,680 lines across 232 production modules |
-| Tests | 4,600+ in 263 files, with enforced coverage thresholds |
+| TypeScript | 51,870 lines across 237 production modules |
+| Tests | 4,889 in 268 files, green on all three platforms; 94% of statements and 96% of lines, under enforced thresholds |
 | CI | Linux, macOS and Windows on Node 20, 22 and 24, plus coverage, build smoke tests and a production dependency audit |
 | Slash commands | 41 |
-| Agent tools | 46, 20 of them behind a confirmation |
+| Agent tools | 47, 23 of them behind a confirmation |
 | Computer vision | native multimodal screenshots and image attachments, vision routing, bounded visual context and coordinate mapping |
 | Browser and desktop | semantic Chrome extension transport plus visually guided OS-level computer use on Windows |
 | Terminal layer | 13 modules, written directly against ANSI — no Ink, no React, no curses |
