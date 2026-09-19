@@ -373,3 +373,7 @@ here remain concrete and testable.
 ## Licence
 
 MIT. See [LICENSE](LICENSE).
+
+---
+
+The rest of this work, and how it is built: [moisejevs.com](https://moisejevs.com)
