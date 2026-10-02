@@ -275,3 +275,86 @@ recorded as missing.
 **Also decided here.** The refresh is tried before the browser. Upwork's
 tokens last a day; an unattended run that stops each morning to ask for a
 sign-in has stopped being unattended.
+## ADR-15 — The judge reads the listing before the agent opens anything on it
+
+**Decision.** `page_read` of a listings page hands the visible job cards —
+extracted in the page script, gated on ≥3 cards with distinct `/jobs/view/`
+ids — to Jev as one call with one noul question per card: the probability
+the vacancy is wrong-fit for the operator. Cards at or above `JEV_WARN_AT`
+are printed in the read result as `JEV CARD FILTER` lines, ahead of the
+page text. The agent model decides; the judge never skips a card on its
+own, and even in `act` mode these lines stay advice.
+
+**Why.** The deterministic FIT CHECK owns keyword fit of an *opened*
+vacancy; the agent model owns the final call on every card. What neither
+covers is the cheap first pass between them: a seniority, domain or
+arrangement mismatch that no keyword list expresses, caught while the
+vacancy is still a card and before the model spends a click, a read and a
+form on it. This is the division of labour recorded in AGENTS.md — one
+question, one owner — applied to the listings surface.
+
+**Cost.** One judge call per listings-page read, awaited inside
+`page_read` with a 4-second cap (tighter than the shadow evaluator's 8);
+on failure or timeout the read proceeds with no lines. At the measured
+$0.042/M input tokens the call is fractions of a cent; the redaction and
+hard cap on what leaves the machine are the same as the rest of the layer.
+
+**Also decided here.** The card extraction is deliberately board-generic —
+anchors matching `/jobs/view/`, the closest `li`/`article`, a 500-character
+ceiling on the climb — because a selector tuned to today's LinkedIn DOM
+is a filter that breaks silently tomorrow. A page with no extractable
+cards simply gets no filter; that is the inert state, not an error.
+
+## ADR-16 — The judge advises before it acts
+
+**Decision.** `JEV_MODE` is `shadow` by default and climbs to `warn` and
+`act`; nothing above `shadow` was switched on until a calibration report
+held up on the product's own traces. In `warn`, a loop verdict at or above
+`JEV_WARN_AT` reaches the agent as one system note it can argue with. In
+`act`, a verdict at or above `JEV_ACT_AT` that stays extreme across
+`JEV_ACT_AFTER` consecutive evaluations becomes a mandatory instruction.
+Even then the judge advises: aborting the loop stays the deterministic
+`RepeatGuard`'s job alone. Every advisory is journaled as a `note`, so an
+authority that intervenes leaves the same trace as any other actor.
+
+**Why.** A judge that can only log is a cost with no return. A judge that
+can stop the run on the day it is wired in is a liability wearing a
+dashboard. The thresholds are not the vendor's defaults: they were
+calibrated on 2026-10-01 from 1,129 overnight shadow records, where every
+sampled verdict at or above 0.85 was a genuine loop and 0.50–0.70 was
+ordinary multi-step work that merely looks cyclical. Authority over the
+loop is earned on the product's own traces or it is not given — the same
+bar `realDevicesAllowed()` sets for hardware, applied to a model.
+
+**Cost.** One judge call per evaluation, bounded by a minimum interval and
+a hard cap on the redacted state text; at the measured $0.042/M input
+tokens the call is fractions of a cent. The mistakes that come with any
+new authority were paid for in shadow mode, where they cost log lines
+instead of runs.
+
+## ADR-17 — One vacancy identity, both judge lanes, rules before judgement
+
+**Decision.** The two judge lanes — the trajectory questions of ADR-16 and
+the card filter of ADR-15 — key on one vacancy identity, `workItemKey`,
+and that identity covers both fronts: LinkedIn's `/jobs/view/` and
+Upwork's `/jobs/details/` spell one vacancy with two URL shapes, so a
+vacancy stuck on an Upwork application is the same stuck vacancy the loop
+lane watched in a browser tab. Ahead of the card filter sits a
+deterministic dead-posting gate, stated by the operator as calendar facts:
+on Upwork nothing older than fifteen hours, nothing with interviews in
+progress, nothing past five proposals; on LinkedIn the golden-window
+gradation of `vacancyFit` (24 hours, then a week, then two). Dead cards
+never reach the judge.
+
+**Why.** The judge answers one question well: "is this wrong-fit?". Asking
+it what a counter can answer wastes the call and pollutes its record — a
+wrong-fit verdict on a dead posting is noise, and a right-fit one is
+worse, because it endorses spending a click, a read and a form on a race
+that is already over. The lanes also have to agree on what a vacancy
+*is*, or the loop lane watches a tab while the card filter judges a card
+and neither knows they are the same job. One identity, two lanes, and
+every rule that can be a rule runs before any model is asked.
+
+**Cost.** The gate is a handful of numeric comparisons at read time; the
+judge sees only cards whose race is still open, which is also where its
+answers are worth having.

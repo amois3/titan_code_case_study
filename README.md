@@ -28,8 +28,8 @@ times the Actions allowance for the same platform signal.
 ## Where the extraction sits now
 
 Titan Code has grown well beyond the snapshot this repository isolates. The
-current product is v3.4.2: 237 TypeScript modules, 4,889 tests across 268
-files, 41 slash commands and 47 built-in tools. It drives a browser and, on
+current product is v3.4.2: 249 TypeScript modules, 5,000+ tests across 274
+files, 43 slash commands and 47 built-in tools. It drives a browser and, on
 Windows, the desktop as well as a codebase. Native multimodal messages let it
 reason over image attachments and live screenshots, while provider adapters
 share one streaming and tool-call contract and autonomous runs retain a
@@ -147,6 +147,59 @@ discarded by navigating back to the vacancy the other rule demanded be read,
 and the run's only way to record anything at all was to write "failed" on an
 application the site was showing as sent.
 
+## A second judge, hired for fractions of a cent
+
+Something that only ever watches its own hands cannot tell when they are going
+in circles. The deterministic repeat guard catches an exact call re-issued
+word for word; the same intent re-spelled, scattered across retries, goes
+straight through it. And a model reading its twentieth near-identical listing
+cannot tell either — each card looks plausible on its own. The failure is
+never in the hands. It is in the *trajectory*, which the actor cannot see.
+
+Titan Code runs a second, much smaller model beside the loop as a
+typed-decision judge, in three lanes.
+
+**The trajectory lane.** After tool results, a bounded window of redacted call
+descriptions is handed to the judge with typed questions — "is this
+semantically looping?", "is this vacancy stuck?" — and the answers land in one
+shadow file per session, next to what the deterministic guard did at the same
+moment. The judge and the guard are compared, not merged: two opinions of the
+same work, one of them free to be wrong because nobody acts on it yet.
+
+**The listing lane.** `page_read` of a listings page extracts the visible job
+cards — board-generically, by the shape of their URLs, never by a tuned
+selector, because a selector matched to today's DOM is a filter that breaks
+silently tomorrow — and asks the judge one question per card: the probability
+the vacancy is wrong-fit for this operator. Confident verdicts are printed
+ahead of the page text. The acting model decides; the judge never skips a
+card on its own, and a deterministic gate answers the calendar questions
+first — how old the posting is, how many proposals are in, whether interviews
+have started — so the judge is never asked what a counter already knows.
+
+**Calibration before authority.** The judge shipped in shadow mode, where its
+verdicts change nothing, and it stayed there until a report turned its records
+into a calibration table against the guard's own ground truth: 1,129 overnight
+verdicts showed that every sampled score at or above 0.85 was a genuine loop,
+while 0.50–0.70 was ordinary multi-step work that merely looks cyclical. Only
+then did it get a voice. `warn` hands a confident verdict to the agent as one
+system note it can argue with; `act` makes an extreme verdict that holds
+across consecutive evaluations a mandatory instruction. Even then the judge
+advises — stopping the loop stays the deterministic guard's job alone, and
+every advisory is journaled as a note, so an authority that intervenes leaves
+the same trace as any other actor.
+
+The division of labour is the point. Deterministic code owns every rule that
+can be a rule — freshness windows, proposal ceilings, interview counts are
+facts a counter checks at zero cost and zero hallucination surface. The judge
+owns meta-judgments about the shape of the work: loops and stalls that a
+regex cannot express and the actor cannot see. The acting model owns
+everything that touches the world. The lanes never overlap — one question,
+one owner, paid for once — and scheduled runs can drive a small, cheap acting
+model while the judge watches its trajectory for fractions of a cent per call
+at measured launch pricing. The layer is inert without a key, redacts its
+state text before the wire, hard-caps what leaves the machine, and refuses to
+run under tests.
+
 ## Signing in to a server that will not take a pasted token
 
 A hosted MCP server can ask for more than a token copied from a settings page.
@@ -179,9 +232,8 @@ signing in properly, which is what happens next.
 ## What is here
 
 Twenty-one modules, 4,791 lines, **zero runtime dependencies** — node's
-standard library and nothing else. 4,549 lines of tests across 19 files, and a
-726-line snapshot of the three design documents that shipped with the
-extraction.
+standard library and nothing else. 4,549 lines of tests across 19 files, and an
+809-line snapshot of the design documents that ship with the product.
 
 | Module | Lines | What it does |
 |---|---:|---|
@@ -329,19 +381,20 @@ protection it does not have.
 
 ## The product this comes from
 
-Verified against Titan Code v3.4.2 on 16 September 2026 — counted from the
-tree and read off the CI run of 15 September, not reconstructed from memory:
+Verified against Titan Code v3.4.2 on 2 October 2026 — counted from the
+tree, not reconstructed from memory:
 
 | | |
 |---|---|
 | Version | 3.4.2 |
-| TypeScript | 51,870 lines across 237 production modules |
-| Tests | 4,889 in 268 files, green on all three platforms; 94% of statements and 96% of lines, under enforced thresholds |
+| TypeScript | 55,497 lines across 249 production modules |
+| Tests | 5,000+ in 274 files, green on all three platforms; 94% of statements and 96% of lines, under enforced thresholds |
 | CI | Linux, macOS and Windows on Node 20, 22 and 24, plus coverage, build smoke tests and a production dependency audit |
-| Slash commands | 41 |
-| Agent tools | 47, 23 of them behind a confirmation |
+| Slash commands | 43 |
+| Agent tools | 47, 20 of them behind a confirmation |
 | Computer vision | native multimodal screenshots and image attachments, vision routing, bounded visual context and coordinate mapping |
 | Browser and desktop | semantic Chrome extension transport plus visually guided OS-level computer use on Windows |
+| Judge layer | a small typed-decision model beside the loop — trajectory and listing-card lanes, shadow-calibrated warn/act advisories, deterministic rules before judgement |
 | Terminal layer | 13 modules, written directly against ANSI — no Ink, no React, no curses |
 | Runtime dependencies | 7 |
 
