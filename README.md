@@ -156,8 +156,10 @@ straight through it. And a model reading its twentieth near-identical listing
 cannot tell either — each card looks plausible on its own. The failure is
 never in the hands. It is in the *trajectory*, which the actor cannot see.
 
-Titan Code runs a second, much smaller model beside the loop as a
-typed-decision judge, in three lanes.
+Titan Code runs a second, much smaller model beside the loop — Jev, a
+typed-decision judge that answers structured questions about a trajectory
+instead of writing text, at a launch price of $0.042 per million input
+tokens — in three lanes.
 
 **The trajectory lane.** After tool results, a bounded window of redacted call
 descriptions is handed to the judge with typed questions — "is this
@@ -195,8 +197,8 @@ owns meta-judgments about the shape of the work: loops and stalls that a
 regex cannot express and the actor cannot see. The acting model owns
 everything that touches the world. The lanes never overlap — one question,
 one owner, paid for once — and scheduled runs can drive a small, cheap acting
-model while the judge watches its trajectory for fractions of a cent per call
-at measured launch pricing. The layer is inert without a key, redacts its
+model while Jev watches its trajectory for fractions of a cent per call. The
+layer is inert without a key, redacts its
 state text before the wire, hard-caps what leaves the machine, and refuses to
 run under tests.
 
@@ -394,7 +396,7 @@ tree, not reconstructed from memory:
 | Agent tools | 47, 20 of them behind a confirmation |
 | Computer vision | native multimodal screenshots and image attachments, vision routing, bounded visual context and coordinate mapping |
 | Browser and desktop | semantic Chrome extension transport plus visually guided OS-level computer use on Windows |
-| Judge layer | a small typed-decision model beside the loop — trajectory and listing-card lanes, shadow-calibrated warn/act advisories, deterministic rules before judgement |
+| Judge layer | Jev, a typed-decision judge beside the loop — trajectory and listing-card lanes, shadow-calibrated warn/act advisories, deterministic rules before judgement |
 | Terminal layer | 13 modules, written directly against ANSI — no Ink, no React, no curses |
 | Runtime dependencies | 7 |
 
