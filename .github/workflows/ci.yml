@@ -6,7 +6,13 @@ name: CI
 on:
   push:
     branches: [main]
+    paths-ignore: ['**.md', 'docs/**']
   pull_request:
+    paths-ignore: ['**.md', 'docs/**']
+  # macOS minutes are billed at ten times the Linux rate, so that leg runs
+  # weekly instead of on every push.
+  schedule:
+    - cron: '43 3 * * 1'
   workflow_dispatch:
 
 # A new push supersedes an older run for the same branch.
@@ -18,19 +24,19 @@ jobs:
   verify:
     name: ${{ matrix.os }} · node ${{ matrix.node }}
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
     strategy:
       # One platform failing should not hide the state of the others.
       fail-fast: false
       matrix:
-        # Every supported OS and every supported Node line, sampled as three
-        # representative cells instead of the full 3x3 Cartesian product.
+        # Linux and Windows run on every push and sample the minimum and
+        # current Node lines. The macOS leg moved to the weekly schedule
+        # below: macOS minutes cost ten times Linux minutes.
         include:
           - os: ubuntu-latest
             node: '20'
           - os: windows-latest
             node: '22'
-          - os: macos-latest
-            node: '24'
 
     steps:
       - uses: actions/checkout@v5
@@ -54,6 +60,36 @@ jobs:
           bwrap --ro-bind / / --dev /dev --proc /proc -- /bin/true \
             && echo "bubblewrap works on this runner" \
             || echo "bubblewrap unusable here; sandbox tests will skip"
+
+      - run: npm ci
+
+      - name: Type check
+        run: npm run typecheck
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Test
+        run: npm test
+        env:
+          # Where a sandbox is supposed to exist, its absence is a failure and
+          # not a skip. Windows has no backend, so the flag is not set there.
+          TITAN_CODE_REQUIRE_SANDBOX: ${{ runner.os == 'Windows' && '0' || '1' }}
+
+  verify-macos:
+    # Runs only on the weekly schedule: macOS minutes are billed at ten times
+    # the Linux rate, which matters on a limited Actions allowance.
+    if: github.event_name == 'schedule'
+    name: macos-latest · node 24
+    runs-on: macos-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '24'
+          cache: npm
 
       - run: npm ci
 
