@@ -9,9 +9,12 @@
 
 Titan Code is a terminal coding agent I wrote in TypeScript: its own agent loop,
 ANSI renderer, MCP client, multimodal computer vision and OS-level confinement
-for shell commands. The same agent can read a codebase, understand screenshots,
-operate a browser or Windows desktop, call tools and verify the result. The full
-implementation is private; I walk through it in interviews.
+for shell commands. Titan Code and TITAN Marketing are now one unified system —
+Titan Code includes the marketing module alongside its coding, browser, and
+Windows desktop capabilities. The same agent can read a codebase, understand
+screenshots, operate a browser or Windows desktop, run marketing workflows, call
+tools and verify the result. The full implementation is private; I walk through
+it in interviews.
 
 This public repository documents how those capabilities fit together and
 includes the extracted security core with its tests and CI. It can be read and
